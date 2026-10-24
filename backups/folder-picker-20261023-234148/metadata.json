@@ -1,0 +1,10 @@
+{
+  "uuid": "dynamic-desktop@local",
+  "name": "Dynamic Desktop",
+  "description": "Prototype for testing smooth wallpaper transitions",
+  "version": 2,
+  "shell-version": [
+    "50"
+  ],
+  "settings-schema": "org.gnome.shell.extensions.dynamic-desktop"
+}

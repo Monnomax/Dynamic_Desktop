@@ -1,0 +1,86 @@
+import Gio from 'gi://Gio';
+import GLib from 'gi://GLib';
+import St from 'gi://St';
+import Clutter from 'gi://Clutter';
+
+import { Extension } from
+    'resource:///org/gnome/shell/extensions/extension.js';
+
+import * as Main from 'resource:///org/gnome/shell/ui/main.js';
+
+export default class DynamicDesktopExtension extends Extension {
+    enable() {
+        this._overlay = null;
+
+        try {
+            this._startTransitionTest();
+        } catch (error) {
+            logError(error, '[Dynamic Desktop] Transition test failed');
+        }
+    }
+
+    _startTransitionTest() {
+        const monitor = Main.layoutManager.primaryMonitor;
+        const backgroundGroup =
+            Main.layoutManager._backgroundGroup ??
+            Main.layoutManager.backgroundGroup;
+
+        if (!monitor)
+            throw new Error('Primary monitor is unavailable');
+
+        if (!backgroundGroup)
+            throw new Error('GNOME background group is unavailable');
+
+        const imagePath = Gio.File.new_for_path(
+            `${GLib.get_home_dir()}/Завантажене/mojave_dynamic/mojave_dynamic_8.jpeg`
+        );
+
+        if (!imagePath.query_exists(null))
+            throw new Error(`Image not found: ${imagePath.get_path()}`);
+
+        const imageUri = imagePath.get_uri();
+
+        const actor = new St.Widget({
+            name: 'dynamic-desktop-transition-test',
+            x: monitor.x,
+            y: monitor.y,
+            width: monitor.width,
+            height: monitor.height,
+            opacity: 0,
+            reactive: false,
+            style: `
+                background-image: url("${imageUri}");
+                background-size: cover;
+                background-repeat: no-repeat;
+                background-position: center;
+            `,
+        });
+
+        backgroundGroup.add_child(actor);
+        this._overlay = actor;
+
+        console.log(
+            '[Dynamic Desktop] Starting four-second wallpaper fade'
+        );
+
+        actor.ease({
+            opacity: 255,
+            duration: 4000,
+            mode: Clutter.AnimationMode.EASE_IN_OUT_QUAD,
+            onComplete: () => {
+                if (this._overlay === actor) {
+                    console.log(
+                        '[Dynamic Desktop] Fade completed successfully'
+                    );
+                }
+            },
+        });
+    }
+
+    disable() {
+        if (this._overlay) {
+            this._overlay.destroy();
+            this._overlay = null;
+        }
+    }
+}

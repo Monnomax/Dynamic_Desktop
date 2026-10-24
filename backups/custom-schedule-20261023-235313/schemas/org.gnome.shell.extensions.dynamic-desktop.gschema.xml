@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist>
+  <schema
+      id="org.gnome.shell.extensions.dynamic-desktop"
+      path="/org/gnome/shell/extensions/dynamic-desktop/">
+
+    <key name="transition-duration" type="d">
+      <default>4.0</default>
+      <range min="1.0" max="10.0"/>
+      <summary>Transition duration</summary>
+      <description>Wallpaper crossfade duration in seconds.</description>
+    </key>
+
+    <key name="wallpaper-directory" type="s">
+      <default>''</default>
+      <summary>Wallpaper directory</summary>
+      <description>Directory containing the wallpaper images.</description>
+    </key>
+
+  </schema>
+</schemalist>

@@ -1,0 +1,195 @@
+import Clutter from 'gi://Clutter';
+import Gio from 'gi://Gio';
+import GLib from 'gi://GLib';
+import St from 'gi://St';
+
+import { Extension } from
+    'resource:///org/gnome/shell/extensions/extension.js';
+
+import * as Main from 'resource:///org/gnome/shell/ui/main.js';
+
+export default class DynamicDesktopExtension extends Extension {
+    enable() {
+        this._active = true;
+        this._actors = new Set();
+        this._currentActor = null;
+        this._nextActor = null;
+        this._timeoutId = 0;
+        this._index = 0;
+
+        this._transitionMs = 4000;
+        this._holdSeconds = 6;
+
+        const directory = GLib.build_filenamev([
+            GLib.get_home_dir(),
+            'Завантажене',
+            'mojave_dynamic',
+        ]);
+
+        const sequence = [
+            15, 16,
+            ...Array.from({ length: 14 }, (_, index) => index + 1),
+        ];
+
+        this._images = sequence.map(number =>
+            GLib.build_filenamev([
+                directory,
+                `mojave_dynamic_${number}.jpeg`,
+            ])
+        );
+
+        try {
+            this._startCycle();
+        } catch (error) {
+            this._active = false;
+            logError(error, '[Dynamic Desktop] Could not start cycle');
+        }
+    }
+
+    _createActor(imagePath) {
+        const file = Gio.File.new_for_path(imagePath);
+
+        if (!file.query_exists(null))
+            throw new Error(`Image not found: ${imagePath}`);
+
+        const monitor = Main.layoutManager.primaryMonitor;
+        const backgroundGroup =
+            Main.layoutManager._backgroundGroup ??
+            Main.layoutManager.backgroundGroup;
+
+        if (!monitor || !backgroundGroup)
+            throw new Error('GNOME background group is unavailable');
+
+        const actor = new St.Widget({
+            name: 'dynamic-desktop-wallpaper-layer',
+            x: monitor.x,
+            y: monitor.y,
+            width: monitor.width,
+            height: monitor.height,
+            opacity: 0,
+            reactive: false,
+            style: `
+                background-image: url("${file.get_uri()}");
+                background-size: cover;
+                background-repeat: no-repeat;
+                background-position: center;
+            `,
+        });
+
+        backgroundGroup.add_child(actor);
+        this._actors.add(actor);
+
+        return actor;
+    }
+
+    _startCycle() {
+        const firstImage = this._images[this._index];
+        const actor = this._createActor(firstImage);
+
+        this._currentActor = actor;
+
+        console.log(
+            `[Dynamic Desktop] Showing ${GLib.path_get_basename(firstImage)}`
+        );
+
+        actor.ease({
+            opacity: 255,
+            duration: this._transitionMs,
+            mode: Clutter.AnimationMode.EASE_IN_OUT_QUAD,
+            onComplete: () => {
+                if (!this._active)
+                    return;
+
+                console.log('[Dynamic Desktop] Initial fade completed');
+                this._scheduleNext();
+            },
+        });
+    }
+
+    _scheduleNext() {
+        if (!this._active)
+            return;
+
+        if (this._timeoutId)
+            GLib.Source.remove(this._timeoutId);
+
+        this._timeoutId = GLib.timeout_add_seconds(
+            GLib.PRIORITY_DEFAULT,
+            this._holdSeconds,
+            () => {
+                this._timeoutId = 0;
+
+                if (this._active) {
+                    try {
+                        this._showNextFrame();
+                    } catch (error) {
+                        logError(error, '[Dynamic Desktop] Frame transition failed');
+                    }
+                }
+
+                return GLib.SOURCE_REMOVE;
+            }
+        );
+    }
+
+    _showNextFrame() {
+        if (!this._active)
+            return;
+
+        this._index = (this._index + 1) % this._images.length;
+
+        const nextImage = this._images[this._index];
+        const nextActor = this._createActor(nextImage);
+        const previousActor = this._currentActor;
+
+        this._nextActor = nextActor;
+
+        // The new layer is above the previous one, initially transparent.
+        // Its opacity animation reveals the new frame gradually.
+        console.log(
+            `[Dynamic Desktop] Crossfade to ${GLib.path_get_basename(nextImage)}`
+        );
+
+        nextActor.ease({
+            opacity: 255,
+            duration: this._transitionMs,
+            mode: Clutter.AnimationMode.EASE_IN_OUT_QUAD,
+            onComplete: () => {
+                if (!this._active)
+                    return;
+
+                if (previousActor) {
+                    previousActor.remove_all_transitions();
+                    previousActor.destroy();
+                    this._actors.delete(previousActor);
+                }
+
+                this._currentActor = nextActor;
+                this._nextActor = null;
+
+                console.log('[Dynamic Desktop] Crossfade completed');
+                this._scheduleNext();
+            },
+        });
+    }
+
+    disable() {
+        this._active = false;
+
+        if (this._timeoutId) {
+            GLib.Source.remove(this._timeoutId);
+            this._timeoutId = 0;
+        }
+
+        for (const actor of this._actors ?? []) {
+            actor.remove_all_transitions();
+            actor.destroy();
+        }
+
+        this._actors?.clear();
+        this._currentActor = null;
+        this._nextActor = null;
+
+        console.log('[Dynamic Desktop] Stopped; temporary layers removed');
+    }
+}

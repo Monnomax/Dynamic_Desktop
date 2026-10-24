@@ -1,0 +1,83 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<schemalist>
+  <schema id="org.gnome.shell.extensions.dynamic-desktop" path="/org/gnome/shell/extensions/dynamic-desktop/">
+    <key name="transition-duration" type="d">
+      <default>4.0</default>
+      <range min="1.0" max="10.0" />
+      <summary>Transition duration</summary>
+      <description>Wallpaper crossfade duration in seconds.</description>
+    </key>
+    <key name="wallpaper-directory" type="s">
+      <default>''</default>
+      <summary>Wallpaper directory</summary>
+      <description>Directory containing the wallpaper images.</description>
+    </key>
+    <key name="schedule-json" type="s">
+      <default>''</default>
+      <summary>Custom wallpaper schedule</summary>
+      <description>Optional custom daily schedule stored as JSON.</description>
+    </key>
+    <key name="schedule-mode" type="s">
+      <default>'clock'</default>
+      <summary>Schedule mode</summary>
+      <description>clock, custom, or solar mode.</description>
+    </key>
+    <key name="latitude" type="d">
+      <default>0.0</default>
+      <summary>Latitude</summary>
+      <description>Latitude used for solar wallpaper selection.</description>
+      <range min="-90.0" max="90.0" />
+    </key>
+    <key name="longitude" type="d">
+      <default>0.0</default>
+      <summary>Longitude</summary>
+      <description>Longitude used for solar wallpaper selection.</description>
+      <range min="-180.0" max="180.0" />
+    </key>
+    <key name="solar-location-configured" type="b">
+      <default>false</default>
+      <summary>Solar location configured</summary>
+      <description>Whether manual coordinates have been saved.</description>
+    </key>
+    <key name="solar-status" type="s">
+      <default>'inactive'</default>
+      <summary>Solar status</summary>
+      <description>Current status of the Solar wallpaper mode.</description>
+    </key>
+    <key name="solar-current-frame" type="s">
+      <default>''</default>
+      <summary>Current Solar frame</summary>
+      <description>Absolute path of the selected Solar wallpaper.</description>
+    </key>
+    <key name="solar-altitude" type="d">
+      <default>0.0</default>
+      <summary>Solar altitude</summary>
+      <description>Current solar altitude in degrees.</description>
+    </key>
+    <key name="solar-azimuth" type="d">
+      <default>0.0</default>
+      <summary>Solar azimuth</summary>
+      <description>Current solar azimuth in degrees.</description>
+    </key>
+    <key name="solar-next-check" type="s">
+      <default>''</default>
+      <summary>Next Solar check</summary>
+      <description>Approximate time of the next Solar position check.</description>
+    </key>
+    <key name="preview-image" type="s">
+      <default>''</default>
+      <summary>Temporary wallpaper preview</summary>
+      <description>Image path requested for a temporary wallpaper preview.</description>
+    </key>
+    <key name="appearance-light-image" type="s">
+      <default>''</default>
+      <summary>Світлі шпалери</summary>
+      <description>Image selected for the light GNOME appearance.</description>
+    </key>
+    <key name="appearance-dark-image" type="s">
+      <default>''</default>
+      <summary>Темні шпалери</summary>
+      <description>Image selected for the dark GNOME appearance.</description>
+    </key>
+  </schema>
+</schemalist>
