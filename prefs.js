@@ -168,10 +168,9 @@ export default class DynamicDesktopPreferences extends ExtensionPreferences {
                 padding: 0;
             }
             frame.wallpaper-thumbnail {
-                border-radius: 6px;
-            }
-            frame.wallpaper-thumbnail > border {
                 border: none;
+                padding: 0;
+                box-shadow: none;
                 border-radius: 6px;
             }
         `, -1);
@@ -828,19 +827,29 @@ export default class DynamicDesktopPreferences extends ExtensionPreferences {
                 'Дані оновлюються автоматично.',
         });
 
-        const previewPicture = new Gtk.Picture();
-        previewPicture.set_size_request(240, 135);
-        previewPicture.set_can_shrink(true);
-        previewPicture.set_content_fit(Gtk.ContentFit.COVER);
-        previewPicture.set_halign(Gtk.Align.CENTER);
-        previewPicture.set_valign(Gtk.Align.CENTER);
-        previewPicture.set_alternative_text('Поточні шпалери Mojave');
-
         const previewRow = new Adw.ActionRow({
             title: 'Поточний кадр',
             subtitle: 'Очікування даних Solar…',
         });
-        previewRow.add_prefix(previewPicture);
+        previewRow.add_css_class('wallpaper-schedule-row');
+        previewRow.set_size_request(-1, 54);
+
+        const previewPicture = new Gtk.Picture();
+        previewPicture.set_can_shrink(false);
+        previewPicture.set_content_fit(Gtk.ContentFit.CONTAIN);
+        previewPicture.set_size_request(44, 44);
+        previewPicture.set_alternative_text('Мініатюра поточного кадру Solar');
+
+        const previewThumbnail = new Gtk.Frame();
+        previewThumbnail.add_css_class('wallpaper-thumbnail');
+        previewThumbnail.set_size_request(44, 44);
+        previewThumbnail.set_child(previewPicture);
+        previewThumbnail.set_valign(Gtk.Align.CENTER);
+        previewThumbnail.set_margin_top(5);
+        previewThumbnail.set_margin_bottom(5);
+        previewThumbnail.set_tooltip_text('Поточний кадр Solar');
+
+        previewRow.add_suffix(previewThumbnail);
         solarStatusGroup.add(previewRow);
 
         const solarStateRow = new Adw.ActionRow({
@@ -867,6 +876,42 @@ export default class DynamicDesktopPreferences extends ExtensionPreferences {
         });
         solarStatusGroup.add(nextCheckRow);
 
+        function updateSolarPreviewThumbnail(framePath) {
+            if (!framePath || !GLib.file_test(framePath, GLib.FileTest.EXISTS)) {
+                previewPicture.set_paintable(null);
+                previewPicture.set_size_request(44, 44);
+                previewThumbnail.set_size_request(44, 44);
+                previewThumbnail.set_tooltip_text('Кадр ще не визначено.');
+                return;
+            }
+
+            try {
+                const pixbuf = GdkPixbuf.Pixbuf.new_from_file_at_scale(
+                    framePath,
+                    320,
+                    44,
+                    true
+                );
+                const aspectRatio = pixbuf.get_width() / pixbuf.get_height();
+                const thumbnailWidth = Math.max(
+                    1,
+                    Math.round(44 * aspectRatio)
+                );
+
+                previewPicture.set_paintable(Gdk.Texture.new_for_pixbuf(pixbuf));
+                previewPicture.set_size_request(thumbnailWidth, 44);
+                previewThumbnail.set_size_request(thumbnailWidth, 44);
+                previewThumbnail.set_tooltip_text(basename(framePath));
+            } catch (error) {
+                previewPicture.set_paintable(null);
+                previewPicture.set_size_request(44, 44);
+                previewThumbnail.set_size_request(44, 44);
+                previewThumbnail.set_tooltip_text(
+                    `${basename(framePath)}: ${error.message}`
+                );
+            }
+        }
+
         function refreshSolarReadout() {
             const mode = settings.get_string('schedule-mode') || 'clock';
 
@@ -874,7 +919,7 @@ export default class DynamicDesktopPreferences extends ExtensionPreferences {
                 solarStateRow.subtitle =
                     'Solar неактивний: вибрано інший режим.';
                 previewRow.subtitle = 'Доступний у режимі Solar.';
-                previewPicture.set_file(null);
+                updateSolarPreviewThumbnail(null);
                 altitudeStatusRow.subtitle = '—';
                 azimuthStatusRow.subtitle = '—';
                 nextCheckRow.subtitle = '—';
@@ -895,10 +940,10 @@ export default class DynamicDesktopPreferences extends ExtensionPreferences {
             const framePath = settings.get_string('solar-current-frame');
 
             if (framePath && GLib.file_test(framePath, GLib.FileTest.EXISTS)) {
-                previewPicture.set_file(Gio.File.new_for_path(framePath));
+                updateSolarPreviewThumbnail(framePath);
                 previewRow.subtitle = basename(framePath);
             } else {
-                previewPicture.set_file(null);
+                updateSolarPreviewThumbnail(null);
                 previewRow.subtitle = 'Кадр ще не визначено.';
             }
 
