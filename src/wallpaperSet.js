@@ -2,12 +2,12 @@ import Gio from "gi://Gio";
 import GLib from "gi://GLib";
 
 export class WallpaperSet {
-    constructor(extension) {
-        this._extension = extension;
+    constructor(settings) {
+        this._settings = settings;
     }
 
     _getDirectory() {
-        const configured = this._extension._settings
+        const configured = this._settings
             .get_string("wallpaper-directory")
             .trim();
 
@@ -123,7 +123,7 @@ export class WallpaperSet {
     }
 
     _createSolarSchedule(images) {
-        const settings = this._extension._settings;
+        const settings = this._settings;
 
         if (!settings.get_boolean("solar-location-configured")) {
             throw new Error(
@@ -182,7 +182,7 @@ export class WallpaperSet {
     }
 
     _readCustomSchedule(images) {
-        const settings = this._extension._settings;
+        const settings = this._settings;
         const mode = settings.get_string("schedule-mode");
         const raw = settings.get_string("schedule-json").trim();
 

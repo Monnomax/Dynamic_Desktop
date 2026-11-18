@@ -1,35 +1,34 @@
 import GLib from "gi://GLib";
 
 export class PreviewController {
-    constructor(extension) {
-        this._extension = extension;
+    constructor({ settings, isActive, scheduleController, wallpaperManager }) {
+        this._settings = settings;
+        this._isActive = isActive;
+        this._scheduleController = scheduleController;
+        this._wallpaperManager = wallpaperManager;
         this._timeoutId = 0;
     }
 
-    _handlePreviewRequest() {
-        const extension = this._extension;
+    handlePreviewRequest() {
+        if (!this._isActive() || !this._settings) return;
 
-        if (!extension._active || !extension._settings) return;
-
-        const imagePath = extension._settings
-            .get_string("preview-image")
-            .trim();
+        const imagePath = this._settings.get_string("preview-image").trim();
 
         if (!imagePath) {
             this._cancelTimeout();
             return;
         }
 
-        if (!extension._scheduleController.images.includes(imagePath)) {
+        if (!this._scheduleController.images.includes(imagePath)) {
             console.warn(
                 "[Dynamic Desktop] Preview rejected: image is not in the active set",
             );
-            extension._settings.set_string("preview-image", "");
+            this._settings.set_string("preview-image", "");
             return;
         }
 
         this._cancelTimeout();
-        extension._scheduleController.cancelScheduledBoundary();
+        this._scheduleController.cancelScheduledBoundary();
 
         const scheduleReturn = () => {
             this._cancelTimeout();
@@ -40,27 +39,26 @@ export class PreviewController {
                 () => {
                     this._timeoutId = 0;
 
-                    if (!extension._active) return GLib.SOURCE_REMOVE;
+                    if (!this._isActive()) return GLib.SOURCE_REMOVE;
 
                     if (
-                        extension._settings &&
-                        extension._settings.get_string("preview-image") ===
-                            imagePath
+                        this._settings &&
+                        this._settings.get_string("preview-image") === imagePath
                     ) {
-                        extension._settings.set_string("preview-image", "");
+                        this._settings.set_string("preview-image", "");
                     }
 
                     console.log(
                         "[Dynamic Desktop] Preview ended; restoring scheduled frame",
                     );
 
-                    extension._scheduleController._refreshSchedule();
+                    this._scheduleController.refresh();
                     return GLib.SOURCE_REMOVE;
                 },
             );
         };
 
-        if (imagePath === extension._wallpaperManager.currentImagePath) {
+        if (imagePath === this._wallpaperManager.currentImagePath) {
             console.log(
                 "[Dynamic Desktop] Preview requested for current frame",
             );
@@ -68,7 +66,7 @@ export class PreviewController {
             return;
         }
 
-        extension._wallpaperManager.previewTo(imagePath, scheduleReturn);
+        this._wallpaperManager.previewTo(imagePath, scheduleReturn);
     }
 
     _cancelTimeout() {
@@ -81,11 +79,11 @@ export class PreviewController {
     disable() {
         this._cancelTimeout();
 
-        if (
-            this._extension._settings &&
-            this._extension._settings.get_string("preview-image")
-        ) {
-            this._extension._settings.set_string("preview-image", "");
-        }
+        if (this._settings?.get_string("preview-image"))
+            this._settings.set_string("preview-image", "");
+
+        this._settings = null;
+        this._scheduleController = null;
+        this._wallpaperManager = null;
     }
 }

@@ -1,17 +1,27 @@
 import Gio from "gi://Gio";
 
 export class SettingsController {
-    constructor(extension) {
-        this._extension = extension;
+    constructor({
+        settings,
+        isActive,
+        scheduleController,
+        desktopWallpaperSync,
+        wallpaperManager,
+        previewController,
+    }) {
+        this._settings = settings;
+        this._isActive = isActive;
+        this._scheduleController = scheduleController;
+        this._desktopWallpaperSync = desktopWallpaperSync;
+        this._wallpaperManager = wallpaperManager;
+        this._previewController = previewController;
+
         this._settingsSignals = [];
         this._desktopAppearanceSettings = null;
         this._desktopAppearanceChangedId = 0;
     }
 
     connect() {
-        const extension = this._extension;
-        const settings = extension._settings;
-
         this._desktopAppearanceSettings = new Gio.Settings({
             schema_id: "org.gnome.desktop.interface",
         });
@@ -20,21 +30,18 @@ export class SettingsController {
                 "changed::color-scheme",
                 () => {
                     if (
-                        extension._active &&
-                        extension._settings &&
-                        extension._settings.get_string("schedule-mode") ===
-                            "appearance"
+                        this._isActive() &&
+                        this._settings &&
+                        this._settings.get_string("schedule-mode") === "appearance"
                     ) {
-                        extension._scheduleController._refreshSchedule();
-                        extension._desktopWallpaperSync._queueDesktopWallpaperSync(
-                            1500,
-                        );
+                        this._scheduleController.refresh();
+                        this._desktopWallpaperSync.queueSync(1500);
                     }
                 },
             );
 
         this._connect("changed::transition-duration", () =>
-            extension._wallpaperManager.updateTransitionDuration(),
+            this._wallpaperManager.updateTransitionDuration(),
         );
 
         for (const key of [
@@ -48,33 +55,31 @@ export class SettingsController {
             "solar-location-configured",
         ]) {
             this._connect(`changed::${key}`, () =>
-                extension._scheduleController._queueReload(),
+                this._scheduleController.queueReload(),
             );
         }
 
         this._connect("changed::preview-image", () =>
-            extension._previewController._handlePreviewRequest(),
+            this._previewController.handlePreviewRequest(),
         );
     }
 
     _connect(signal, callback) {
-        const id = this._extension._settings.connect(signal, callback);
+        const id = this._settings.connect(signal, callback);
         this._settingsSignals.push(id);
     }
 
     isDark() {
         return (
-            this._desktopAppearanceSettings.get_string("color-scheme") ===
+            this._desktopAppearanceSettings?.get_string("color-scheme") ===
             "prefer-dark"
         );
     }
 
     disable() {
-        const settings = this._extension._settings;
-
-        if (settings) {
+        if (this._settings) {
             for (const id of this._settingsSignals) {
-                if (id) settings.disconnect(id);
+                if (id) this._settings.disconnect(id);
             }
         }
 
@@ -91,5 +96,10 @@ export class SettingsController {
 
         this._desktopAppearanceChangedId = 0;
         this._desktopAppearanceSettings = null;
+        this._settings = null;
+        this._scheduleController = null;
+        this._desktopWallpaperSync = null;
+        this._wallpaperManager = null;
+        this._previewController = null;
     }
 }

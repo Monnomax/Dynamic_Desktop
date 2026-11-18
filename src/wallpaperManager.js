@@ -5,14 +5,28 @@ import St from "gi://St";
 import * as Main from "resource:///org/gnome/shell/ui/main.js";
 
 export class WallpaperManager {
-    constructor(extension) {
-        this._extension = extension;
+    constructor({
+        settings,
+        isActive,
+        syncDesktopWallpaper,
+        cancelScheduledBoundary,
+        scheduleNextBoundary,
+        refreshSchedule,
+    }) {
+        this._settings = settings;
+        this._isActive = isActive;
+        this._syncSystemWallpaper = syncDesktopWallpaper;
+        this._cancelScheduleBoundary = cancelScheduledBoundary;
+        this._requestScheduleNextBoundary = scheduleNextBoundary;
+        this._requestScheduleRefresh = refreshSchedule;
+
         this._actors = new Set();
+        this._destroyingActors = new WeakSet();
         this._currentActor = null;
         this._currentImagePath = null;
         this._transitionSerial = 0;
         this._transitionMs = Math.round(
-            extension._settings.get_double("transition-duration") * 1000,
+            settings.get_double("transition-duration") * 1000,
         );
     }
 
@@ -25,8 +39,10 @@ export class WallpaperManager {
     }
 
     updateTransitionDuration() {
+        if (!this._settings) return;
+
         this._transitionMs = Math.round(
-            this._extension._settings.get_double("transition-duration") * 1000,
+            this._settings.get_double("transition-duration") * 1000,
         );
     }
 
@@ -63,10 +79,26 @@ export class WallpaperManager {
         backgroundGroup.add_child(actor);
         this._actors.add(actor);
 
+        const imageName = GLib.path_get_basename(imagePath);
+        actor.connect("destroy", () => {
+            this._actors.delete(actor);
+
+            if (this._currentActor === actor) {
+                this._currentActor = null;
+                this._currentImagePath = null;
+            }
+
+            if (!this._destroyingActors.has(actor)) {
+                console.warn(
+                    `[Dynamic Desktop] Wallpaper actor destroyed externally: ${imageName}`,
+                );
+            }
+        });
+
         return actor;
     }
 
-    _showInitialImage(imagePath) {
+    showInitialImage(imagePath) {
         const actor = this._createActor(imagePath);
 
         this._currentActor = actor;
@@ -82,27 +114,63 @@ export class WallpaperManager {
             duration: this._transitionMs,
             mode: Clutter.AnimationMode.EASE_IN_OUT_QUAD,
             onComplete: () => {
-                if (this._extension._active)
-                    this._extension._scheduleController._refreshSchedule();
+                if (this._isActive()) this._requestScheduleRefresh();
             },
         });
+    }
+
+    _isActorDestroyed(actor) {
+        if (!actor) return true;
+
+        try {
+            return Boolean(actor._destroyed || actor.is_destroyed?.());
+        } catch {
+            return true;
+        }
     }
 
     _destroyActor(actor) {
         if (!actor) return;
 
-        actor.remove_all_transitions();
-        actor.destroy();
-        this._actors.delete(actor);
-    }
+        if (this._isActorDestroyed(actor)) {
+            this._actors.delete(actor);
 
-    _transitionTo(imagePath) {
-        const extension = this._extension;
+            if (this._currentActor === actor) {
+                this._currentActor = null;
+                this._currentImagePath = null;
+            }
+            return;
+        }
 
-        if (!extension._active) return;
+        this._destroyingActors.add(actor);
 
         try {
-            extension._desktopWallpaperSync._syncDesktopWallpaper(imagePath);
+            if (!this._isActorDestroyed(actor))
+                actor.remove_all_transitions();
+        } catch (error) {
+            logError(error, "[Dynamic Desktop] Could not stop wallpaper actor transitions");
+        }
+
+        try {
+            if (!this._isActorDestroyed(actor)) actor.destroy();
+        } catch (error) {
+            logError(error, "[Dynamic Desktop] Could not destroy wallpaper actor");
+        } finally {
+            this._destroyingActors.delete(actor);
+            this._actors.delete(actor);
+
+            if (this._currentActor === actor) {
+                this._currentActor = null;
+                this._currentImagePath = null;
+            }
+        }
+    }
+
+    transitionTo(imagePath) {
+        if (!this._isActive()) return;
+
+        try {
+            this._syncSystemWallpaper(imagePath);
         } catch (error) {
             logError(
                 error,
@@ -110,10 +178,10 @@ export class WallpaperManager {
             );
         }
 
-        extension._scheduleController.cancelScheduledBoundary();
+        this._cancelScheduleBoundary();
 
         if (imagePath === this._currentImagePath) {
-            extension._scheduleController._scheduleNextBoundary();
+            this._requestScheduleNextBoundary();
             return;
         }
 
@@ -123,16 +191,20 @@ export class WallpaperManager {
             nextActor = this._createActor(imagePath);
         } catch (error) {
             logError(error, "[Dynamic Desktop] Could not create next frame");
-            extension._scheduleController._scheduleNextBoundary();
+            this._requestScheduleNextBoundary();
             return;
         }
 
+        // Keep both the current frame and the newly-created transition target.
+        // _createActor() has already added nextActor to this._actors.
         for (const actor of [...this._actors]) {
-            if (actor !== this._currentActor) this._destroyActor(actor);
+            if (actor !== this._currentActor && actor !== nextActor)
+                this._destroyActor(actor);
         }
 
         const previousActor = this._currentActor;
-        previousActor?.remove_all_transitions();
+        if (!this._isActorDestroyed(previousActor))
+            previousActor.remove_all_transitions();
 
         const serial = ++this._transitionSerial;
         this._currentActor = nextActor;
@@ -148,19 +220,20 @@ export class WallpaperManager {
             duration: this._transitionMs,
             mode: Clutter.AnimationMode.EASE_IN_OUT_QUAD,
             onComplete: () => {
-                if (!extension._active || serial !== this._transitionSerial)
+                if (!this._isActive() || serial !== this._transitionSerial)
                     return;
 
                 if (previousActor) this._destroyActor(previousActor);
 
                 console.log("[Dynamic Desktop] Crossfade completed");
-                extension._scheduleController._refreshSchedule();
+                this._requestScheduleRefresh();
             },
         });
     }
 
     previewTo(imagePath, onComplete) {
-        const extension = this._extension;
+        if (!this._isActive()) return false;
+
         const previousActor = this._currentActor;
 
         for (const actor of [...this._actors]) {
@@ -173,11 +246,12 @@ export class WallpaperManager {
             nextActor = this._createActor(imagePath, 0);
         } catch (error) {
             logError(error, "[Dynamic Desktop] Cannot show preview");
-            extension._scheduleController._scheduleNextBoundary();
+            this._requestScheduleNextBoundary();
             return false;
         }
 
-        previousActor?.remove_all_transitions();
+        if (!this._isActorDestroyed(previousActor))
+            previousActor.remove_all_transitions();
 
         const serial = ++this._transitionSerial;
         this._currentActor = nextActor;
@@ -192,7 +266,7 @@ export class WallpaperManager {
             duration: this._transitionMs,
             mode: Clutter.AnimationMode.EASE_IN_OUT_QUAD,
             onComplete: () => {
-                if (!extension._active || serial !== this._transitionSerial)
+                if (!this._isActive() || serial !== this._transitionSerial)
                     return;
 
                 if (previousActor) this._destroyActor(previousActor);
@@ -215,5 +289,11 @@ export class WallpaperManager {
     disable() {
         this._transitionSerial++;
         this._removeAllActors();
+
+        this._settings = null;
+        this._syncSystemWallpaper = null;
+        this._cancelScheduleBoundary = null;
+        this._requestScheduleNextBoundary = null;
+        this._requestScheduleRefresh = null;
     }
 }

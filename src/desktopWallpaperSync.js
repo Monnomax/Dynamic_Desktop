@@ -2,8 +2,19 @@ import Gio from "gi://Gio";
 import GLib from "gi://GLib";
 
 export class DesktopWallpaperSync {
-    constructor(extension) {
-        this._extension = extension;
+    constructor({
+        settings,
+        isActive,
+        getAppearanceConfig,
+        getCurrentImagePath,
+        getScheduledImagePath,
+    }) {
+        this._settings = settings;
+        this._isActive = isActive;
+        this._getAppearanceConfig = getAppearanceConfig;
+        this._getCurrentImagePath = getCurrentImagePath;
+        this._getScheduledImagePath = getScheduledImagePath;
+
         this._desktopBackgroundSettings = new Gio.Settings({
             schema_id: "org.gnome.desktop.background",
         });
@@ -20,7 +31,7 @@ export class DesktopWallpaperSync {
         this._syncTimeoutId = 0;
     }
 
-    _queueDesktopWallpaperSync(delayMs = 1500) {
+    queueSync(delayMs = 1500) {
         if (this._syncTimeoutId) {
             GLib.Source.remove(this._syncTimeoutId);
             this._syncTimeoutId = 0;
@@ -33,13 +44,12 @@ export class DesktopWallpaperSync {
                 this._syncTimeoutId = 0;
 
                 if (
-                    this._extension._active &&
-                    this._extension._settings &&
-                    this._extension._settings.get_string("schedule-mode") ===
-                        "appearance"
+                    this._isActive() &&
+                    this._settings &&
+                    this._settings.get_string("schedule-mode") === "appearance"
                 ) {
                     try {
-                        this._syncDesktopWallpaper();
+                        this.sync();
                     } catch (error) {
                         logError(
                             error,
@@ -53,23 +63,23 @@ export class DesktopWallpaperSync {
         );
     }
 
-    _syncDesktopWallpaper(imagePath = null) {
+    sync(imagePath = null) {
         const desktopSettings = this._desktopBackgroundSettings;
 
         if (!desktopSettings) return;
 
-        const schedule = this._extension._scheduleController;
+        const appearanceConfig = this._getAppearanceConfig();
         let lightPath;
         let darkPath;
 
-        if (schedule.appearanceConfig) {
-            lightPath = schedule.appearanceConfig.light;
-            darkPath = schedule.appearanceConfig.dark;
+        if (appearanceConfig) {
+            lightPath = appearanceConfig.light;
+            darkPath = appearanceConfig.dark;
         } else {
             const currentPath =
                 imagePath ??
-                this._extension._wallpaperManager.currentImagePath ??
-                schedule._imageForNow(new Date());
+                this._getCurrentImagePath() ??
+                this._getScheduledImagePath();
 
             if (!currentPath) return;
 
@@ -129,9 +139,9 @@ export class DesktopWallpaperSync {
 
                 const currentUri = desktopSettings.get_string(key);
 
-                if (currentUri === appliedUri && currentUri !== originalUri) {
+                // Do not overwrite a wallpaper changed by the user or another extension.
+                if (currentUri === appliedUri && currentUri !== originalUri)
                     desktopSettings.set_string(key, originalUri);
-                }
             } catch (error) {
                 logError(error, `[Dynamic Desktop] Cannot restore ${key}`);
             }
@@ -149,5 +159,6 @@ export class DesktopWallpaperSync {
         }
 
         this._restoreDesktopWallpaper();
+        this._settings = null;
     }
 }

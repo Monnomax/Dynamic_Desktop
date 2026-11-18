@@ -1,10 +1,23 @@
 import GLib from "gi://GLib";
-import { WallpaperSet } from "./wallpaperSet.js";
 
 export class ScheduleController {
-    constructor(extension) {
-        this._extension = extension;
-        this._wallpaperSet = new WallpaperSet(extension);
+    constructor({
+        settings,
+        isActive,
+        wallpaperSet,
+        solarController,
+        wallpaperManager,
+        desktopWallpaperSync,
+        isDark,
+    }) {
+        this._settings = settings;
+        this._isActive = isActive;
+        this._wallpaperSet = wallpaperSet;
+        this._solarController = solarController;
+        this._wallpaperManager = wallpaperManager;
+        this._desktopWallpaperSync = desktopWallpaperSync;
+        this._isDark = isDark;
+
         this._images = [];
         this._schedule = [];
         this._solarAnchors = null;
@@ -23,23 +36,12 @@ export class ScheduleController {
     }
 
     load() {
-        try {
-            this._loadImageSet();
-        } catch (error) {
-            logError(error, "[Dynamic Desktop] Failed to start");
-            this._extension._active = false;
-            this._extension._settingsController.disable();
-            this._extension._previewController.disable();
-            this.disable();
-            this._extension._solarController.disable();
-            this._extension._desktopWallpaperSync.disable();
-            this._extension._wallpaperManager.disable();
-            this._extension._settings = null;
-        }
+        // Startup failures are propagated to the extension lifecycle owner.
+        this._loadImageSet();
     }
 
-    _queueReload() {
-        if (!this._extension._active) return;
+    queueReload() {
+        if (!this._isActive()) return;
 
         if (this._reloadTimeoutId) {
             GLib.Source.remove(this._reloadTimeoutId);
@@ -52,7 +54,7 @@ export class ScheduleController {
             () => {
                 this._reloadTimeoutId = 0;
 
-                if (this._extension._active) this._reloadSafely();
+                if (this._isActive()) this._reloadSafely();
 
                 return GLib.SOURCE_REMOVE;
             },
@@ -60,7 +62,7 @@ export class ScheduleController {
     }
 
     _reloadSafely() {
-        if (!this._extension._active) return;
+        if (!this._isActive()) return;
 
         try {
             this._loadImageSet();
@@ -78,32 +80,29 @@ export class ScheduleController {
         this._solarAnchors = result.solarAnchors ?? null;
         this._appearanceConfig = result.appearance ?? null;
 
-        this._extension._solarController.setAnchors(this._solarAnchors);
-        this._extension._desktopWallpaperSync._syncDesktopWallpaper();
+        this._solarController.setAnchors(this._solarAnchors);
+        this._desktopWallpaperSync.sync();
 
         console.log(
             `[Dynamic Desktop] Loaded ${result.images.length} images from ` +
                 `${result.directory} (${result.name})`,
         );
 
-        if (!this._extension._wallpaperManager.currentActor) {
-            this._extension._wallpaperManager._showInitialImage(
-                this._imageForNow(new Date()),
-            );
+        if (!this._wallpaperManager.currentActor) {
+            this._wallpaperManager.showInitialImage(this.imageForNow(new Date()));
         } else {
-            this._refreshSchedule();
+            this.refresh();
         }
     }
 
-    _imageForNow(date) {
-        if (this._appearanceConfig) {
-            return this._extension._settingsController.isDark()
+    imageForNow(date) {
+        if (this._appearanceConfig)
+            return this._isDark()
                 ? this._appearanceConfig.dark
                 : this._appearanceConfig.light;
-        }
 
         if (this._solarAnchors)
-            return this._extension._solarController._solarImageForNow(date);
+            return this._solarController.imageForNow(date);
 
         const minute = date.getHours() * 60 + date.getMinutes();
         let image = this._schedule[this._schedule.length - 1].image;
@@ -117,17 +116,17 @@ export class ScheduleController {
         return image;
     }
 
-    _refreshSchedule() {
-        if (!this._extension._active) return;
+    refresh() {
+        if (!this._isActive()) return;
 
-        const desired = this._imageForNow(new Date());
+        const desired = this.imageForNow(new Date());
 
-        if (desired !== this._extension._wallpaperManager.currentImagePath) {
-            this._extension._wallpaperManager._transitionTo(desired);
+        if (desired !== this._wallpaperManager.currentImagePath) {
+            this._wallpaperManager.transitionTo(desired);
             return;
         }
 
-        this._scheduleNextBoundary();
+        this.scheduleNextBoundary();
     }
 
     _nextBoundary(now) {
@@ -147,10 +146,7 @@ export class ScheduleController {
 
                 if (candidate.getTime() <= nowMs + 25) continue;
 
-                if (
-                    entry.image ===
-                    this._extension._wallpaperManager.currentImagePath
-                )
+                if (entry.image === this._wallpaperManager.currentImagePath)
                     continue;
 
                 return candidate;
@@ -167,15 +163,13 @@ export class ScheduleController {
         }
     }
 
-    _scheduleNextBoundary() {
-        if (!this._extension._active) return;
+    scheduleNextBoundary() {
+        if (!this._isActive()) return;
 
         this.cancelScheduledBoundary();
 
         if (this._solarAnchors) {
-            this._extension._solarController.setNextCheck(
-                new Date(Date.now() + 60000),
-            );
+            this._solarController.setNextCheck(new Date(Date.now() + 60000));
 
             this._timeoutId = GLib.timeout_add_seconds(
                 GLib.PRIORITY_DEFAULT,
@@ -183,7 +177,7 @@ export class ScheduleController {
                 () => {
                     this._timeoutId = 0;
 
-                    if (this._extension._active) this._refreshSchedule();
+                    if (this._isActive()) this.refresh();
 
                     return GLib.SOURCE_REMOVE;
                 },
@@ -211,7 +205,7 @@ export class ScheduleController {
             () => {
                 this._timeoutId = 0;
 
-                if (this._extension._active) this._refreshSchedule();
+                if (this._isActive()) this.refresh();
 
                 return GLib.SOURCE_REMOVE;
             },
@@ -225,5 +219,12 @@ export class ScheduleController {
             GLib.Source.remove(this._reloadTimeoutId);
             this._reloadTimeoutId = 0;
         }
+
+        this._settings = null;
+        this._wallpaperSet = null;
+        this._solarController = null;
+        this._wallpaperManager = null;
+        this._desktopWallpaperSync = null;
+        this._isDark = null;
     }
 }

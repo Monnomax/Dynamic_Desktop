@@ -2,8 +2,9 @@ import GLib from "gi://GLib";
 import { calculateSolarPosition, selectSolarFrame } from "./solar.js";
 
 export class SolarController {
-    constructor(extension) {
-        this._extension = extension;
+    constructor({ settings, getCurrentImagePath }) {
+        this._settings = settings;
+        this._getCurrentImagePath = getCurrentImagePath;
         this._anchors = null;
         this._lastDiagnosticState = null;
         this._lastDiagnosticForce = true;
@@ -23,32 +24,27 @@ export class SolarController {
     }
 
     _sunPosition(date) {
-        const settings = this._extension._settings;
-
         return calculateSolarPosition(
             date,
-            settings.get_double("latitude"),
-            settings.get_double("longitude"),
+            this._settings.get_double("latitude"),
+            this._settings.get_double("longitude"),
         );
     }
 
     _setSettingStringIfChanged(key, value) {
-        const settings = this._extension._settings;
+        if (!this._settings) return;
 
-        if (!settings) return;
-
-        if (settings.get_string(key) !== value) settings.set_string(key, value);
+        if (this._settings.get_string(key) !== value)
+            this._settings.set_string(key, value);
     }
 
     _setSettingDoubleIfChanged(key, value) {
-        const settings = this._extension._settings;
-
-        if (!settings || !Number.isFinite(value)) return;
+        if (!this._settings || !Number.isFinite(value)) return;
 
         const rounded = Math.round(value * 100) / 100;
 
-        if (settings.get_double(key) !== rounded)
-            settings.set_double(key, rounded);
+        if (this._settings.get_double(key) !== rounded)
+            this._settings.set_double(key, rounded);
     }
 
     _publishSolarState(sun, selectedImage) {
@@ -62,14 +58,14 @@ export class SolarController {
         this._setSettingStringIfChanged("solar-next-check", date.toISOString());
     }
 
-    _solarImageForNow(date) {
+    imageForNow(date) {
         if (!this._anchors) return null;
 
         const sun = this._sunPosition(date);
         const decision = selectSolarFrame(
             sun,
             this._anchors,
-            this._extension._wallpaperManager.currentImagePath,
+            this._getCurrentImagePath(),
             0.5,
         );
 
@@ -81,7 +77,6 @@ export class SolarController {
         const nearestName = GLib.path_get_basename(
             decision.nearestAnchor.image,
         );
-
         const diagnosticState = [
             selectedName,
             nearestName,
@@ -120,5 +115,7 @@ export class SolarController {
     disable() {
         this._anchors = null;
         this._lastDiagnosticState = null;
+        this._settings = null;
+        this._getCurrentImagePath = null;
     }
 }
