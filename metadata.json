@@ -1,0 +1,8 @@
+{
+    "uuid": "dynamic_desktop@local",
+    "name": "Dynamic Desktop",
+    "description": "Dynamic wallpaper sets with smooth transitions and time-based scheduling.",
+    "version": 8,
+    "shell-version": ["50", "51"],
+    "settings-schema": "org.gnome.shell.extensions.dynamic_desktop"
+}
