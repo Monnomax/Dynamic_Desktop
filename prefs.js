@@ -156,8 +156,6 @@ function readSchedule(images, raw) {
 
 export default class DynamicDesktopPreferences extends ExtensionPreferences {
     fillPreferencesWindow(window) {
-        window.set_default_size(760, 860);
-
         const settings = this.getSettings();
 
         const scheduleRowCss = new Gtk.CssProvider();
