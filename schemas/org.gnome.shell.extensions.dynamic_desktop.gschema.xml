@@ -1,6 +1,7 @@
 <?xml version='1.0' encoding='UTF-8'?>
 <schemalist>
-  <schema id="org.gnome.shell.extensions.dynamic_desktop" path="/org/gnome/shell/extensions/dynamic_desktop/">
+  <schema id="org.gnome.shell.extensions.dynamic_desktop"
+    path="/org/gnome/shell/extensions/dynamic_desktop/">
     <key name="transition-duration" type="d">
       <default>4.0</default>
       <range min="1.0" max="10.0" />

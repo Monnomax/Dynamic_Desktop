@@ -1,31 +1,28 @@
-import Adw from 'gi://Adw';
-import Gdk from 'gi://Gdk';
-import GdkPixbuf from 'gi://GdkPixbuf';
-import Gio from 'gi://Gio';
-import GLib from 'gi://GLib';
-import Gtk from 'gi://Gtk';
-import { RegulatorButton } from './regulatorButton.js';
+import Adw from "gi://Adw";
+import Gdk from "gi://Gdk";
+import GdkPixbuf from "gi://GdkPixbuf";
+import Gio from "gi://Gio";
+import GLib from "gi://GLib";
+import Gtk from "gi://Gtk";
+import { RegulatorButton } from "./src/regulatorButton.js";
 
-import { ExtensionPreferences } from
-    'resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js';
+import { ExtensionPreferences } from "resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js";
 
 function basename(path) {
-    return path.substring(path.lastIndexOf('/') + 1);
+    return path.substring(path.lastIndexOf("/") + 1);
 }
 
 function displayDirectory(path) {
     const home = GLib.get_home_dir();
-    return path.startsWith(home)
-        ? `~${path.substring(home.length)}`
-        : path;
+    return path.startsWith(home) ? `~${path.substring(home.length)}` : path;
 }
 
 function listImages(directoryPath) {
     const directory = Gio.File.new_for_path(directoryPath);
     const enumerator = directory.enumerate_children(
-        'standard::name,standard::type',
+        "standard::name,standard::type",
         Gio.FileQueryInfoFlags.NONE,
-        null
+        null,
     );
 
     const images = [];
@@ -34,8 +31,7 @@ function listImages(directoryPath) {
         let info;
 
         while ((info = enumerator.next_file(null)) !== null) {
-            if (info.get_file_type() !== Gio.FileType.REGULAR)
-                continue;
+            if (info.get_file_type() !== Gio.FileType.REGULAR) continue;
 
             const name = info.get_name();
 
@@ -47,11 +43,10 @@ function listImages(directoryPath) {
     }
 
     images.sort((a, b) =>
-        basename(a).localeCompare(
-            basename(b),
-            undefined,
-            { numeric: true, sensitivity: 'base' }
-        )
+        basename(a).localeCompare(basename(b), undefined, {
+            numeric: true,
+            sensitivity: "base",
+        }),
     );
 
     return images;
@@ -61,9 +56,12 @@ function isMojaveSet(directoryPath) {
     try {
         const names = new Set(listImages(directoryPath).map(basename));
 
-        return names.size === 16 &&
-            Array.from({ length: 16 }, (_, index) => index + 1)
-                .every(number => names.has(`mojave_dynamic_${number}.jpeg`));
+        return (
+            names.size === 16 &&
+            Array.from({ length: 16 }, (_, index) => index + 1).every(
+                (number) => names.has(`mojave_dynamic_${number}.jpeg`),
+            )
+        );
     } catch (_) {
         return false;
     }
@@ -75,14 +73,14 @@ function defaultSchedule(images) {
     for (const path of images) {
         const match = basename(path).match(/^mojave_dynamic_(\d+)\.jpeg$/i);
 
-        if (match)
-            byNumber.set(Number(match[1]), path);
+        if (match) byNumber.set(Number(match[1]), path);
     }
 
     const isMojave =
         images.length === 16 &&
-        Array.from({ length: 16 }, (_, i) => i + 1)
-            .every(number => byNumber.has(number));
+        Array.from({ length: 16 }, (_, i) => i + 1).every((number) =>
+            byNumber.has(number),
+        );
 
     if (isMojave) {
         const times = new Map([
@@ -104,7 +102,7 @@ function defaultSchedule(images) {
             [15, 1380],
         ]);
 
-        return images.map(path => {
+        return images.map((path) => {
             const match = basename(path).match(/^mojave_dynamic_(\d+)\.jpeg$/i);
 
             return {
@@ -116,18 +114,17 @@ function defaultSchedule(images) {
 
     return images.map((path, index) => ({
         file: basename(path),
-        minute: Math.floor(index * 1440 / images.length),
+        minute: Math.floor((index * 1440) / images.length),
     }));
 }
 
 function readSchedule(images, raw) {
-    if (!raw.trim())
-        return defaultSchedule(images);
+    if (!raw.trim()) return defaultSchedule(images);
 
     const data = JSON.parse(raw);
 
     if (!Array.isArray(data) || data.length !== images.length)
-        throw new Error('Розклад має містити всі зображення.');
+        throw new Error("Розклад має містити всі зображення.");
 
     const names = new Set(images.map(basename));
     const usedNames = new Set();
@@ -135,17 +132,20 @@ function readSchedule(images, raw) {
 
     for (const entry of data) {
         if (!entry || !names.has(entry.file))
-            throw new Error('Розклад містить невідоме зображення.');
+            throw new Error("Розклад містить невідоме зображення.");
 
-        if (!Number.isInteger(entry.minute) ||
-            entry.minute < 0 || entry.minute >= 1440)
-            throw new Error('Недійсний час у розкладі.');
+        if (
+            !Number.isInteger(entry.minute) ||
+            entry.minute < 0 ||
+            entry.minute >= 1440
+        )
+            throw new Error("Недійсний час у розкладі.");
 
         if (usedNames.has(entry.file))
-            throw new Error('Зображення повторюється в розкладі.');
+            throw new Error("Зображення повторюється в розкладі.");
 
         if (usedTimes.has(entry.minute))
-            throw new Error('Два зображення не можуть починатися одночасно.');
+            throw new Error("Два зображення не можуть починатися одночасно.");
 
         usedNames.add(entry.file);
         usedTimes.add(entry.minute);
@@ -159,7 +159,8 @@ export default class DynamicDesktopPreferences extends ExtensionPreferences {
         const settings = this.getSettings();
 
         const scheduleRowCss = new Gtk.CssProvider();
-        scheduleRowCss.load_from_data(`
+        scheduleRowCss.load_from_data(
+            `
             row.wallpaper-schedule-row {
                 min-height: 54px;
                 padding: 0;
@@ -173,47 +174,48 @@ export default class DynamicDesktopPreferences extends ExtensionPreferences {
                 box-shadow: none;
                 border-radius: 6px;
             }
-        `, -1);
+        `,
+            -1,
+        );
 
         const cssDisplay = Gdk.Display.get_default();
         if (cssDisplay) {
             Gtk.StyleContext.add_provider_for_display(
                 cssDisplay,
                 scheduleRowCss,
-                Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
+                Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION,
             );
         }
 
         const defaultDirectory = GLib.build_filenamev([
             GLib.get_home_dir(),
-            'Завантажене',
-            'mojave_dynamic',
+            "Завантажене",
+            "mojave_dynamic",
         ]);
 
         const page = new Adw.PreferencesPage({
-            title: 'Основні',
+            title: "Основні",
         });
 
         const folderGroup = new Adw.PreferencesGroup({
-            title: 'Набір шпалер',
-            description: 'Оберіть теку з JPG, PNG або WebP-зображеннями.',
+            title: "Набір шпалер",
+            description: "Оберіть теку з JPG, PNG або WebP-зображеннями.",
         });
 
         const folderRow = new Adw.ActionRow({
-            title: 'Папка зі шпалерами',
+            title: "Папка зі шпалерами",
             subtitle: displayDirectory(
-                settings.get_string('wallpaper-directory') ||
-                defaultDirectory
+                settings.get_string("wallpaper-directory") || defaultDirectory,
             ),
         });
 
         const chooseButton = new Gtk.Button({
-            label: 'Вибрати…',
+            label: "Вибрати…",
             valign: Gtk.Align.CENTER,
         });
 
         const restoreFolderButton = new Gtk.Button({
-            label: 'Mojave',
+            label: "Mojave",
             valign: Gtk.Align.CENTER,
         });
 
@@ -224,34 +226,33 @@ export default class DynamicDesktopPreferences extends ExtensionPreferences {
         page.add(folderGroup);
 
         const modeGroup = new Adw.PreferencesGroup({
-            title: 'Режим зміни шпалер',
+            title: "Режим зміни шпалер",
             description:
-                'Вибери годинниковий розклад, власні часові точки або Solar для Mojave.',
+                "Вибери годинниковий розклад, власні часові точки або Solar для Mojave.",
         });
 
-        const modeValues = ['clock', 'custom', 'solar', 'appearance'];
+        const modeValues = ["clock", "custom", "solar", "appearance"];
         const modeLabels = [
-            'За часом доби',
-            'Власний розклад',
-            'Solar — положення Сонця',
-            'Appearance — світла / темна тема',
+            "За часом доби",
+            "Власний розклад",
+            "Solar — положення Сонця",
+            "Appearance — світла / темна тема",
         ];
 
         const modeModel = new Gtk.StringList();
-        for (const label of modeLabels)
-            modeModel.append(label);
+        for (const label of modeLabels) modeModel.append(label);
 
-        const storedMode = settings.get_string('schedule-mode') || 'clock';
+        const storedMode = settings.get_string("schedule-mode") || "clock";
 
         const modeRow = new Adw.ComboRow({
-            title: 'Режим',
+            title: "Режим",
             model: modeModel,
             selected: Math.max(0, modeValues.indexOf(storedMode)),
         });
 
         const modeStatusRow = new Adw.ActionRow({
-            title: 'Поточний режим',
-            subtitle: '',
+            title: "Поточний режим",
+            subtitle: "",
         });
 
         modeGroup.add(modeRow);
@@ -259,42 +260,46 @@ export default class DynamicDesktopPreferences extends ExtensionPreferences {
         page.add(modeGroup);
 
         const solarGroup = new Adw.PreferencesGroup({
-            title: 'Місце для Solar',
+            title: "Місце для Solar",
             description:
-                'Координати вводяться вручну та зберігаються локально. ' +
-                'Solar поки підтримує повний набір Mojave із 16 кадрів.',
+                "Координати вводяться вручну та зберігаються локально. " +
+                "Solar поки підтримує повний набір Mojave із 16 кадрів.",
         });
 
         const latitudeRow = new Adw.ActionRow({
-            title: 'Широта',
-            subtitle: 'Від −90 до 90 градусів',
+            title: "Широта",
+            subtitle: "Від −90 до 90 градусів",
         });
 
-        const latitudeButton = RegulatorButton.forSetting(settings, 'latitude', {
-            minValue: -90,
-            maxValue: 90,
-            step: 0.01,
-            defaultValue: 0,
-            digits: 2,
-        });
+        const latitudeButton = RegulatorButton.forSetting(
+            settings,
+            "latitude",
+            {
+                minValue: -90,
+                maxValue: 90,
+                step: 0.01,
+                defaultValue: 0,
+                digits: 2,
+            },
+        );
         latitudeRow.add_suffix(latitudeButton);
         latitudeRow.activatable_widget = latitudeButton;
 
         const longitudeRow = new Adw.ActionRow({
-            title: 'Довгота',
-            subtitle: 'Від −180 до 180 градусів',
+            title: "Довгота",
+            subtitle: "Від −180 до 180 градусів",
         });
 
         const longitudeButton = RegulatorButton.forSetting(
             settings,
-            'longitude',
+            "longitude",
             {
                 minValue: -180,
                 maxValue: 180,
                 step: 0.01,
                 defaultValue: 0,
                 digits: 2,
-            }
+            },
         );
         longitudeRow.add_suffix(longitudeButton);
         longitudeRow.activatable_widget = longitudeButton;
@@ -303,70 +308,70 @@ export default class DynamicDesktopPreferences extends ExtensionPreferences {
         solarGroup.add(longitudeRow);
 
         const saveLocationRow = new Adw.ActionRow({
-            title: 'Зберегти координати',
-            subtitle: 'Без онлайн-геолокації.',
+            title: "Зберегти координати",
+            subtitle: "Без онлайн-геолокації.",
         });
 
         const saveLocationButton = new Gtk.Button({
-            label: 'Зберегти',
+            label: "Зберегти",
             valign: Gtk.Align.CENTER,
         });
 
         saveLocationRow.add_suffix(saveLocationButton);
         solarGroup.add(saveLocationRow);
 
-        function updateModeStatus(mode = settings.get_string('schedule-mode')) {
-            if (mode === 'solar') {
+        function updateModeStatus(mode = settings.get_string("schedule-mode")) {
+            if (mode === "solar") {
                 modeStatusRow.subtitle =
-                    'Solar: вибір кадру за висотою та азимутом Сонця.';
-            } else if (mode === 'appearance') {
+                    "Solar: вибір кадру за висотою та азимутом Сонця.";
+            } else if (mode === "appearance") {
                 modeStatusRow.subtitle =
-                    'Appearance: кадр автоматично змінюється разом із темою GNOME.';
-            } else if (mode === 'custom') {
+                    "Appearance: кадр автоматично змінюється разом із темою GNOME.";
+            } else if (mode === "custom") {
                 modeStatusRow.subtitle =
-                    'Власний розклад: часові точки з редактора нижче.';
+                    "Власний розклад: часові точки з редактора нижче.";
             } else {
                 modeStatusRow.subtitle =
-                    'За часом доби: типовий розклад набору.';
+                    "За часом доби: типовий розклад набору.";
             }
         }
 
-        modeRow.connect('notify::selected', () => {
-            const requestedMode = modeValues[modeRow.selected] ?? 'clock';
+        modeRow.connect("notify::selected", () => {
+            const requestedMode = modeValues[modeRow.selected] ?? "clock";
 
-            if (requestedMode === 'solar') {
+            if (requestedMode === "solar") {
                 const directoryPath =
-                    settings.get_string('wallpaper-directory') ||
+                    settings.get_string("wallpaper-directory") ||
                     defaultDirectory;
 
-                if (!settings.get_boolean('solar-location-configured')) {
+                if (!settings.get_boolean("solar-location-configured")) {
                     modeStatusRow.subtitle =
-                        'Спочатку введи та збережи координати.';
+                        "Спочатку введи та збережи координати.";
                     modeRow.selected = Math.max(
                         0,
                         modeValues.indexOf(
-                            settings.get_string('schedule-mode') || 'clock'
-                        )
+                            settings.get_string("schedule-mode") || "clock",
+                        ),
                     );
                     return;
                 }
 
                 if (!isMojaveSet(directoryPath)) {
                     modeStatusRow.subtitle =
-                        'Solar наразі доступний лише для набору Mojave з 16 кадрів.';
+                        "Solar наразі доступний лише для набору Mojave з 16 кадрів.";
                     modeRow.selected = Math.max(
                         0,
                         modeValues.indexOf(
-                            settings.get_string('schedule-mode') || 'clock'
-                        )
+                            settings.get_string("schedule-mode") || "clock",
+                        ),
                     );
                     return;
                 }
             }
 
-            if (requestedMode === 'appearance') {
+            if (requestedMode === "appearance") {
                 const directoryPath =
-                    settings.get_string('wallpaper-directory') ||
+                    settings.get_string("wallpaper-directory") ||
                     defaultDirectory;
 
                 let images;
@@ -374,25 +379,24 @@ export default class DynamicDesktopPreferences extends ExtensionPreferences {
                 try {
                     images = listImages(directoryPath);
                 } catch (error) {
-                    modeStatusRow.subtitle =
-                        `Не вдалося прочитати теку: ${error.message}`;
+                    modeStatusRow.subtitle = `Не вдалося прочитати теку: ${error.message}`;
                     modeRow.selected = Math.max(
                         0,
                         modeValues.indexOf(
-                            settings.get_string('schedule-mode') || 'clock'
-                        )
+                            settings.get_string("schedule-mode") || "clock",
+                        ),
                     );
                     return;
                 }
 
                 if (images.length < 2) {
                     modeStatusRow.subtitle =
-                        'Для Appearance потрібно щонайменше два зображення.';
+                        "Для Appearance потрібно щонайменше два зображення.";
                     modeRow.selected = Math.max(
                         0,
                         modeValues.indexOf(
-                            settings.get_string('schedule-mode') || 'clock'
-                        )
+                            settings.get_string("schedule-mode") || "clock",
+                        ),
                     );
                     return;
                 }
@@ -400,20 +404,20 @@ export default class DynamicDesktopPreferences extends ExtensionPreferences {
                 refreshAppearanceModels(images);
             }
 
-            settings.set_string('schedule-mode', requestedMode);
+            settings.set_string("schedule-mode", requestedMode);
 
-            if (requestedMode === 'clock')
-                settings.set_string('schedule-json', '');
+            if (requestedMode === "clock")
+                settings.set_string("schedule-json", "");
 
             updateModeStatus(requestedMode);
         });
 
-        saveLocationButton.connect('clicked', () => {
+        saveLocationButton.connect("clicked", () => {
             // Avoid running a half-updated coordinate pair in Solar mode.
-            settings.set_boolean('solar-location-configured', false);
-            settings.set_double('latitude', latitudeRow.value);
-            settings.set_double('longitude', longitudeRow.value);
-            settings.set_boolean('solar-location-configured', true);
+            settings.set_boolean("solar-location-configured", false);
+            settings.set_double("latitude", latitudeRow.value);
+            settings.set_double("longitude", longitudeRow.value);
+            settings.set_boolean("solar-location-configured", true);
 
             modeStatusRow.subtitle =
                 `Координати збережено: ${latitudeRow.value.toFixed(4)}, ` +
@@ -424,23 +428,23 @@ export default class DynamicDesktopPreferences extends ExtensionPreferences {
         page.add(solarGroup);
 
         const appearanceGroup = new Adw.PreferencesGroup({
-            title: 'Світла й темна тема',
+            title: "Світла й темна тема",
             description:
-                'Вибери окремі зображення для світлої та темної теми GNOME.',
+                "Вибери окремі зображення для світлої та темної теми GNOME.",
         });
 
         const appearanceLightModel = new Gtk.StringList();
         const appearanceDarkModel = new Gtk.StringList();
 
         const appearanceLightRow = new Adw.ComboRow({
-            title: 'Світла тема',
-            subtitle: 'Кадр для світлого оформлення',
+            title: "Світла тема",
+            subtitle: "Кадр для світлого оформлення",
             model: appearanceLightModel,
         });
 
         const appearanceDarkRow = new Adw.ComboRow({
-            title: 'Темна тема',
-            subtitle: 'Кадр для темного оформлення',
+            title: "Темна тема",
+            subtitle: "Кадр для темного оформлення",
             model: appearanceDarkModel,
         });
 
@@ -450,19 +454,19 @@ export default class DynamicDesktopPreferences extends ExtensionPreferences {
 
         // HEIC/HEIF importer: first implementation supports Appearance schedules.
         const heicImportGroup = new Adw.PreferencesGroup({
-            title: 'Імпорт динамічних шпалер HEIC/HEIF',
+            title: "Імпорт динамічних шпалер HEIC/HEIF",
             description:
-                'Розпакування оригінальних шпалер macOS через timewall. ' +
-                'Автоматично налаштовується розклад Appearance.',
+                "Розпакування оригінальних шпалер macOS через timewall. " +
+                "Автоматично налаштовується розклад Appearance.",
         });
 
         const heicImportRow = new Adw.ActionRow({
-            title: 'Імпортувати динамічні шпалери',
-            subtitle: 'Вибери оригінальний файл HEIC або HEIF.',
+            title: "Імпортувати динамічні шпалери",
+            subtitle: "Вибери оригінальний файл HEIC або HEIF.",
         });
 
         const heicImportButton = new Gtk.Button({
-            label: 'Вибрати файл…',
+            label: "Вибрати файл…",
             valign: Gtk.Align.CENTER,
         });
 
@@ -470,10 +474,10 @@ export default class DynamicDesktopPreferences extends ExtensionPreferences {
         heicImportGroup.add(heicImportRow);
 
         const heicImportStatusRow = new Adw.ActionRow({
-            title: 'Стан імпорту',
+            title: "Стан імпорту",
             subtitle:
-                'Підтримуються файли з розкладом Appearance ' +
-                '(світла й темна теми).',
+                "Підтримуються файли з розкладом Appearance " +
+                "(світла й темна теми).",
         });
 
         heicImportGroup.add(heicImportStatusRow);
@@ -485,9 +489,9 @@ export default class DynamicDesktopPreferences extends ExtensionPreferences {
 
                 try {
                     process = Gio.Subprocess.new(
-                        ['timewall', ...args],
+                        ["timewall", ...args],
                         Gio.SubprocessFlags.STDOUT_PIPE |
-                        Gio.SubprocessFlags.STDERR_PIPE
+                            Gio.SubprocessFlags.STDERR_PIPE,
                     );
                 } catch (error) {
                     reject(error);
@@ -496,19 +500,25 @@ export default class DynamicDesktopPreferences extends ExtensionPreferences {
 
                 process.communicate_utf8_async(null, null, (source, result) => {
                     try {
-                        const [, stdout, stderr] = source.communicate_utf8_finish(result);
+                        const [, stdout, stderr] =
+                            source.communicate_utf8_finish(result);
 
                         if (!source.get_successful()) {
-                            reject(new Error(
-                                (stderr || stdout || 'Команда timewall завершилася помилкою.')
-                                    .trim()
-                            ));
+                            reject(
+                                new Error(
+                                    (
+                                        stderr ||
+                                        stdout ||
+                                        "Команда timewall завершилася помилкою."
+                                    ).trim(),
+                                ),
+                            );
                             return;
                         }
 
                         resolve({
-                            stdout: stdout ?? '',
-                            stderr: stderr ?? '',
+                            stdout: stdout ?? "",
+                            stderr: stderr ?? "",
                         });
                     } catch (error) {
                         reject(error);
@@ -517,21 +527,19 @@ export default class DynamicDesktopPreferences extends ExtensionPreferences {
             });
         }
 
-        heicImportButton.connect('clicked', () => {
+        heicImportButton.connect("clicked", () => {
             const chooser = Gtk.FileChooserNative.new(
-                'Вибрати динамічні шпалери HEIC/HEIF',
+                "Вибрати динамічні шпалери HEIC/HEIF",
                 window,
                 Gtk.FileChooserAction.OPEN,
-                'Імпортувати',
-                'Скасувати'
+                "Імпортувати",
+                "Скасувати",
             );
 
             const filter = new Gtk.FileFilter();
-            filter.set_name('Динамічні шпалери HEIC/HEIF');
+            filter.set_name("Динамічні шпалери HEIC/HEIF");
 
-            for (const pattern of [
-                '*.heic', '*.heif', '*.HEIC', '*.HEIF',
-            ]) {
+            for (const pattern of ["*.heic", "*.heif", "*.HEIC", "*.HEIF"]) {
                 filter.add_pattern(pattern);
             }
 
@@ -542,65 +550,67 @@ export default class DynamicDesktopPreferences extends ExtensionPreferences {
                     Gio.File.new_for_path(
                         GLib.build_filenamev([
                             GLib.get_home_dir(),
-                            'Завантажене',
-                        ])
-                    )
+                            "Завантажене",
+                        ]),
+                    ),
                 );
             } catch (_) {
                 // The suggested directory may not exist.
             }
 
-            chooser.connect('response', (dialog, response) => {
-                const sourcePath = response === Gtk.ResponseType.ACCEPT
-                    ? dialog.get_file()?.get_path()
-                    : null;
+            chooser.connect("response", (dialog, response) => {
+                const sourcePath =
+                    response === Gtk.ResponseType.ACCEPT
+                        ? dialog.get_file()?.get_path()
+                        : null;
 
                 dialog.destroy();
 
-                if (!sourcePath)
-                    return;
+                if (!sourcePath) return;
 
                 heicImportButton.sensitive = false;
-                heicImportRow.subtitle = 'Перевірка метаданих…';
+                heicImportRow.subtitle = "Перевірка метаданих…";
                 heicImportStatusRow.subtitle =
-                    'Поточні налаштування не змінюються до завершення імпорту.';
+                    "Поточні налаштування не змінюються до завершення імпорту.";
 
                 (async () => {
                     // Read the schedule before creating output or changing settings.
-                    const { stdout: infoText } =
-                        await runTimewall(['info', sourcePath]);
+                    const { stdout: infoText } = await runTimewall([
+                        "info",
+                        sourcePath,
+                    ]);
 
                     const typeMatch = infoText.match(
-                        /^[ \t]*Schedule type:[ \t]*([^\r\n]+)[ \t]*$/mi
+                        /^[ \t]*Schedule type:[ \t]*([^\r\n]+)[ \t]*$/im,
                     );
 
                     const scheduleType =
-                        typeMatch?.[1]?.trim().toLowerCase() ?? '';
+                        typeMatch?.[1]?.trim().toLowerCase() ?? "";
 
-                    if (scheduleType !== 'appearance') {
+                    if (scheduleType !== "appearance") {
                         throw new Error(
-                            `Тип розкладу: ${scheduleType || 'невідомий'}. ` +
-                            'Ця версія автоматично імпортує лише Appearance. ' +
-                            'Активні налаштування не змінено.'
+                            `Тип розкладу: ${scheduleType || "невідомий"}. ` +
+                                "Ця версія автоматично імпортує лише Appearance. " +
+                                "Активні налаштування не змінено.",
                         );
                     }
 
                     const countMatch = infoText.match(
-                        /^[ \t]*Number of images:[ \t]*(\d+)[ \t]*$/mi
+                        /^[ \t]*Number of images:[ \t]*(\d+)[ \t]*$/im,
                     );
 
                     const lightMatch = infoText.match(
-                        /^[ \t]*Light:[ \t]*(\d+)[ \t]*$/mi
+                        /^[ \t]*Light:[ \t]*(\d+)[ \t]*$/im,
                     );
 
                     const darkMatch = infoText.match(
-                        /^[ \t]*Dark:[ \t]*(\d+)[ \t]*$/mi
+                        /^[ \t]*Dark:[ \t]*(\d+)[ \t]*$/im,
                     );
 
                     if (!countMatch || !lightMatch || !darkMatch) {
                         throw new Error(
-                            'Не вдалося визначити кількість кадрів ' +
-                            'або індекси світлої й темної тем.'
+                            "Не вдалося визначити кількість кадрів " +
+                                "або індекси світлої й темної тем.",
                         );
                     }
 
@@ -616,16 +626,16 @@ export default class DynamicDesktopPreferences extends ExtensionPreferences {
                         darkIndex >= imageCount
                     ) {
                         throw new Error(
-                            'Метадані містять некоректні індекси кадрів.'
+                            "Метадані містять некоректні індекси кадрів.",
                         );
                     }
 
-                    heicImportRow.subtitle = 'Розпакування кадрів…';
+                    heicImportRow.subtitle = "Розпакування кадрів…";
 
                     const importRootPath = GLib.build_filenamev([
                         GLib.get_home_dir(),
-                        'Зображення',
-                        'Dynamic Desktop Imports',
+                        "Зображення",
+                        "Dynamic Desktop Imports",
                     ]);
 
                     const importRoot = Gio.File.new_for_path(importRootPath);
@@ -633,13 +643,14 @@ export default class DynamicDesktopPreferences extends ExtensionPreferences {
                     if (!importRoot.query_exists(null))
                         importRoot.make_directory_with_parents(null);
 
-                    const sourceName = GLib.path_get_basename(sourcePath)
-                        .replace(/\.(heic|heif)$/i, '')
-                        .replace(/[^a-zA-Z0-9._-]+/g, '-')
-                        .replace(/^-+|-+$/g, '') || 'dynamic-wallpaper';
+                    const sourceName =
+                        GLib.path_get_basename(sourcePath)
+                            .replace(/\.(heic|heif)$/i, "")
+                            .replace(/[^a-zA-Z0-9._-]+/g, "-")
+                            .replace(/^-+|-+$/g, "") || "dynamic-wallpaper";
 
                     const outputDir = importRoot.get_child(
-                        `${sourceName}-${Date.now()}`
+                        `${sourceName}-${Date.now()}`,
                     );
 
                     // timewall requires the destination directory to exist.
@@ -647,11 +658,7 @@ export default class DynamicDesktopPreferences extends ExtensionPreferences {
 
                     const outputPath = outputDir.get_path();
 
-                    await runTimewall([
-                        'unpack',
-                        sourcePath,
-                        outputPath,
-                    ]);
+                    await runTimewall(["unpack", sourcePath, outputPath]);
 
                     const lightPath = GLib.build_filenamev([
                         outputPath,
@@ -664,14 +671,17 @@ export default class DynamicDesktopPreferences extends ExtensionPreferences {
                     ]);
 
                     for (const requiredPath of [
-                        GLib.build_filenamev([outputPath, 'properties.xml']),
+                        GLib.build_filenamev([outputPath, "properties.xml"]),
                         lightPath,
                         darkPath,
                     ]) {
-                        if (!Gio.File.new_for_path(requiredPath)
-                            .query_exists(null)) {
+                        if (
+                            !Gio.File.new_for_path(requiredPath).query_exists(
+                                null,
+                            )
+                        ) {
                             throw new Error(
-                                `Після розпакування не знайдено: ${requiredPath}`
+                                `Після розпакування не знайдено: ${requiredPath}`,
                             );
                         }
                     }
@@ -680,11 +690,13 @@ export default class DynamicDesktopPreferences extends ExtensionPreferences {
                     let appearanceModeIndex = -1;
                     const modeModel = modeRow.model;
 
-                    for (let index = 0;
+                    for (
+                        let index = 0;
                         index < modeModel.get_n_items();
-                        index++) {
+                        index++
+                    ) {
                         const item = modeModel.get_item(index);
-                        const label = item?.get_string?.() ?? '';
+                        const label = item?.get_string?.() ?? "";
 
                         if (/(appearance|тем)/i.test(label)) {
                             appearanceModeIndex = index;
@@ -694,51 +706,42 @@ export default class DynamicDesktopPreferences extends ExtensionPreferences {
 
                     if (appearanceModeIndex < 0) {
                         throw new Error(
-                            'Не вдалося знайти режим Appearance ' +
-                            'у списку режимів розширення.'
+                            "Не вдалося знайти режим Appearance " +
+                                "у списку режимів розширення.",
                         );
                     }
 
                     // Select the mode first; then install the exact imported paths.
                     modeRow.selected = appearanceModeIndex;
 
-                    settings.set_string('schedule-json', '');
-                    settings.set_string(
-                        'appearance-light-image',
-                        lightPath
-                    );
-                    settings.set_string(
-                        'appearance-dark-image',
-                        darkPath
-                    );
+                    settings.set_string("schedule-json", "");
+                    settings.set_string("appearance-light-image", lightPath);
+                    settings.set_string("appearance-dark-image", darkPath);
 
                     // Set the directory last so reload sees the final settings.
-                    settings.set_string('wallpaper-directory', outputPath);
+                    settings.set_string("wallpaper-directory", outputPath);
 
                     refreshScheduleEditor();
 
-                    heicImportRow.subtitle =
-                        `Імпортовано: ${basename(sourcePath)}`;
+                    heicImportRow.subtitle = `Імпортовано: ${basename(sourcePath)}`;
 
                     heicImportStatusRow.subtitle =
                         `Готово. Світла тема: ${lightIndex}.png; ` +
                         `темна тема: ${darkIndex}.png. ` +
                         `Тека: ${outputPath}`;
+                })()
+                    .catch((error) => {
+                        heicImportRow.subtitle = "Імпорт не завершено.";
 
-                })().catch(error => {
-                    heicImportRow.subtitle = 'Імпорт не завершено.';
-
-                    heicImportStatusRow.subtitle =
-                        `Помилка: ${error?.message ?? error}`;
-
-                }).finally(() => {
-                    heicImportButton.sensitive = true;
-                });
+                        heicImportStatusRow.subtitle = `Помилка: ${error?.message ?? error}`;
+                    })
+                    .finally(() => {
+                        heicImportButton.sensitive = true;
+                    });
             });
 
             chooser.show();
         });
-
 
         let appearanceImages = [];
         let updatingAppearanceChoices = false;
@@ -747,12 +750,8 @@ export default class DynamicDesktopPreferences extends ExtensionPreferences {
             updatingAppearanceChoices = true;
             appearanceImages = [...images];
 
-            for (const model of [
-                appearanceLightModel,
-                appearanceDarkModel,
-            ]) {
-                while (model.get_n_items() > 0)
-                    model.remove(0);
+            for (const model of [appearanceLightModel, appearanceDarkModel]) {
+                while (model.get_n_items() > 0) model.remove(0);
 
                 for (const imagePath of images)
                     model.append(basename(imagePath));
@@ -770,17 +769,15 @@ export default class DynamicDesktopPreferences extends ExtensionPreferences {
             appearanceLightRow.sensitive = true;
             appearanceDarkRow.sensitive = true;
 
-            let lightPath = settings.get_string('appearance-light-image');
-            let darkPath = settings.get_string('appearance-dark-image');
+            let lightPath = settings.get_string("appearance-light-image");
+            let darkPath = settings.get_string("appearance-dark-image");
 
             let lightIndex = images.indexOf(lightPath);
             let darkIndex = images.indexOf(darkPath);
 
-            if (lightIndex < 0)
-                lightIndex = 0;
+            if (lightIndex < 0) lightIndex = 0;
 
-            if (darkIndex < 0)
-                darkIndex = Math.max(0, images.length - 1);
+            if (darkIndex < 0) darkIndex = Math.max(0, images.length - 1);
 
             appearanceLightRow.selected = lightIndex;
             appearanceDarkRow.selected = darkIndex;
@@ -790,98 +787,99 @@ export default class DynamicDesktopPreferences extends ExtensionPreferences {
 
             updatingAppearanceChoices = false;
 
-            if (settings.get_string('appearance-light-image') !== selectedLight)
-                settings.set_string('appearance-light-image', selectedLight);
+            if (settings.get_string("appearance-light-image") !== selectedLight)
+                settings.set_string("appearance-light-image", selectedLight);
 
-            if (settings.get_string('appearance-dark-image') !== selectedDark)
-                settings.set_string('appearance-dark-image', selectedDark);
+            if (settings.get_string("appearance-dark-image") !== selectedDark)
+                settings.set_string("appearance-dark-image", selectedDark);
         }
 
-        appearanceLightRow.connect('notify::selected', () => {
-            if (updatingAppearanceChoices)
-                return;
+        appearanceLightRow.connect("notify::selected", () => {
+            if (updatingAppearanceChoices) return;
 
             const index = appearanceLightRow.selected;
             const imagePath = appearanceImages[index];
 
             if (imagePath)
-                settings.set_string('appearance-light-image', imagePath);
+                settings.set_string("appearance-light-image", imagePath);
         });
 
-        appearanceDarkRow.connect('notify::selected', () => {
-            if (updatingAppearanceChoices)
-                return;
+        appearanceDarkRow.connect("notify::selected", () => {
+            if (updatingAppearanceChoices) return;
 
             const index = appearanceDarkRow.selected;
             const imagePath = appearanceImages[index];
 
             if (imagePath)
-                settings.set_string('appearance-dark-image', imagePath);
+                settings.set_string("appearance-dark-image", imagePath);
         });
 
         // Live Solar status and wallpaper preview.
         const solarStatusGroup = new Adw.PreferencesGroup({
-            title: 'Стан Solar',
+            title: "Стан Solar",
             description:
-                'Поточний кадр і розраховане положення Сонця. ' +
-                'Дані оновлюються автоматично.',
+                "Поточний кадр і розраховане положення Сонця. " +
+                "Дані оновлюються автоматично.",
         });
 
         const previewRow = new Adw.ActionRow({
-            title: 'Поточний кадр',
-            subtitle: 'Очікування даних Solar…',
+            title: "Поточний кадр",
+            subtitle: "Очікування даних Solar…",
         });
-        previewRow.add_css_class('wallpaper-schedule-row');
+        previewRow.add_css_class("wallpaper-schedule-row");
         previewRow.set_size_request(-1, 54);
 
         const previewPicture = new Gtk.Picture();
         previewPicture.set_can_shrink(false);
         previewPicture.set_content_fit(Gtk.ContentFit.CONTAIN);
         previewPicture.set_size_request(44, 44);
-        previewPicture.set_alternative_text('Мініатюра поточного кадру Solar');
+        previewPicture.set_alternative_text("Мініатюра поточного кадру Solar");
 
         const previewThumbnail = new Gtk.Frame();
-        previewThumbnail.add_css_class('wallpaper-thumbnail');
+        previewThumbnail.add_css_class("wallpaper-thumbnail");
         previewThumbnail.set_size_request(44, 44);
         previewThumbnail.set_child(previewPicture);
         previewThumbnail.set_valign(Gtk.Align.CENTER);
         previewThumbnail.set_margin_top(5);
         previewThumbnail.set_margin_bottom(5);
-        previewThumbnail.set_tooltip_text('Поточний кадр Solar');
+        previewThumbnail.set_tooltip_text("Поточний кадр Solar");
 
         previewRow.add_suffix(previewThumbnail);
         solarStatusGroup.add(previewRow);
 
         const solarStateRow = new Adw.ActionRow({
-            title: 'Стан',
-            subtitle: 'Очікування…',
+            title: "Стан",
+            subtitle: "Очікування…",
         });
         solarStatusGroup.add(solarStateRow);
 
         const altitudeStatusRow = new Adw.ActionRow({
-            title: 'Висота Сонця',
-            subtitle: '—',
+            title: "Висота Сонця",
+            subtitle: "—",
         });
         solarStatusGroup.add(altitudeStatusRow);
 
         const azimuthStatusRow = new Adw.ActionRow({
-            title: 'Азимут Сонця',
-            subtitle: '—',
+            title: "Азимут Сонця",
+            subtitle: "—",
         });
         solarStatusGroup.add(azimuthStatusRow);
 
         const nextCheckRow = new Adw.ActionRow({
-            title: 'Наступна перевірка',
-            subtitle: '—',
+            title: "Наступна перевірка",
+            subtitle: "—",
         });
         solarStatusGroup.add(nextCheckRow);
 
         function updateSolarPreviewThumbnail(framePath) {
-            if (!framePath || !GLib.file_test(framePath, GLib.FileTest.EXISTS)) {
+            if (
+                !framePath ||
+                !GLib.file_test(framePath, GLib.FileTest.EXISTS)
+            ) {
                 previewPicture.set_paintable(null);
                 previewPicture.set_size_request(44, 44);
                 previewThumbnail.set_size_request(44, 44);
-                previewThumbnail.set_tooltip_text('Кадр ще не визначено.');
+                previewThumbnail.set_tooltip_text("Кадр ще не визначено.");
                 return;
             }
 
@@ -890,15 +888,17 @@ export default class DynamicDesktopPreferences extends ExtensionPreferences {
                     framePath,
                     320,
                     44,
-                    true
+                    true,
                 );
                 const aspectRatio = pixbuf.get_width() / pixbuf.get_height();
                 const thumbnailWidth = Math.max(
                     1,
-                    Math.round(44 * aspectRatio)
+                    Math.round(44 * aspectRatio),
                 );
 
-                previewPicture.set_paintable(Gdk.Texture.new_for_pixbuf(pixbuf));
+                previewPicture.set_paintable(
+                    Gdk.Texture.new_for_pixbuf(pixbuf),
+                );
                 previewPicture.set_size_request(thumbnailWidth, 44);
                 previewThumbnail.set_size_request(thumbnailWidth, 44);
                 previewThumbnail.set_tooltip_text(basename(framePath));
@@ -907,84 +907,83 @@ export default class DynamicDesktopPreferences extends ExtensionPreferences {
                 previewPicture.set_size_request(44, 44);
                 previewThumbnail.set_size_request(44, 44);
                 previewThumbnail.set_tooltip_text(
-                    `${basename(framePath)}: ${error.message}`
+                    `${basename(framePath)}: ${error.message}`,
                 );
             }
         }
 
         function refreshSolarReadout() {
-            const mode = settings.get_string('schedule-mode') || 'clock';
+            const mode = settings.get_string("schedule-mode") || "clock";
 
-            if (mode !== 'solar') {
+            if (mode !== "solar") {
                 solarStateRow.subtitle =
-                    'Solar неактивний: вибрано інший режим.';
-                previewRow.subtitle = 'Доступний у режимі Solar.';
+                    "Solar неактивний: вибрано інший режим.";
+                previewRow.subtitle = "Доступний у режимі Solar.";
                 updateSolarPreviewThumbnail(null);
-                altitudeStatusRow.subtitle = '—';
-                azimuthStatusRow.subtitle = '—';
-                nextCheckRow.subtitle = '—';
+                altitudeStatusRow.subtitle = "—";
+                azimuthStatusRow.subtitle = "—";
+                nextCheckRow.subtitle = "—";
                 return;
             }
 
-            if (!settings.get_boolean('solar-location-configured')) {
-                solarStateRow.subtitle =
-                    'Спочатку збережи широту й довготу.';
+            if (!settings.get_boolean("solar-location-configured")) {
+                solarStateRow.subtitle = "Спочатку збережи широту й довготу.";
             } else {
-                const status = settings.get_string('solar-status');
+                const status = settings.get_string("solar-status");
 
-                solarStateRow.subtitle = status === 'active'
-                    ? 'Активний'
-                    : 'Очікування даних від розширення…';
+                solarStateRow.subtitle =
+                    status === "active"
+                        ? "Активний"
+                        : "Очікування даних від розширення…";
             }
 
-            const framePath = settings.get_string('solar-current-frame');
+            const framePath = settings.get_string("solar-current-frame");
 
             if (framePath && GLib.file_test(framePath, GLib.FileTest.EXISTS)) {
                 updateSolarPreviewThumbnail(framePath);
                 previewRow.subtitle = basename(framePath);
             } else {
                 updateSolarPreviewThumbnail(null);
-                previewRow.subtitle = 'Кадр ще не визначено.';
+                previewRow.subtitle = "Кадр ще не визначено.";
             }
 
-            const altitude = settings.get_double('solar-altitude');
-            const azimuth = settings.get_double('solar-azimuth');
+            const altitude = settings.get_double("solar-altitude");
+            const azimuth = settings.get_double("solar-azimuth");
 
-            altitudeStatusRow.subtitle =
-                `${altitude >= 0 ? '+' : ''}${altitude.toFixed(2)}°`;
+            altitudeStatusRow.subtitle = `${altitude >= 0 ? "+" : ""}${altitude.toFixed(2)}°`;
 
             azimuthStatusRow.subtitle = `${azimuth.toFixed(2)}°`;
 
-            const nextValue = settings.get_string('solar-next-check');
+            const nextValue = settings.get_string("solar-next-check");
 
             if (nextValue) {
                 const nextDate = new Date(nextValue);
 
                 nextCheckRow.subtitle = Number.isNaN(nextDate.getTime())
-                    ? 'Очікування наступної перевірки…'
+                    ? "Очікування наступної перевірки…"
                     : nextDate.toLocaleTimeString(undefined, {
-                        hour: '2-digit',
-                        minute: '2-digit',
-                        second: '2-digit',
-                    });
+                          hour: "2-digit",
+                          minute: "2-digit",
+                          second: "2-digit",
+                      });
             } else {
-                nextCheckRow.subtitle = '—';
+                nextCheckRow.subtitle = "—";
             }
         }
 
         const solarReadoutSignals = [
-            'schedule-mode',
-            'solar-location-configured',
-            'solar-status',
-            'solar-current-frame',
-            'solar-altitude',
-            'solar-azimuth',
-            'solar-next-check',
-        ].map(key =>
-            settings.connect(`changed::${key}`, refreshSolarReadout)
+            "schedule-mode",
+            "solar-location-configured",
+            "solar-status",
+            "solar-current-frame",
+            "solar-altitude",
+            "solar-azimuth",
+            "solar-next-check",
+        ].map((key) =>
+            settings.connect(`changed::${key}`, refreshSolarReadout),
         );
 
-        window.connect('close-request', () => {
+        window.connect("close-request", () => {
             for (const signalId of solarReadoutSignals) {
                 try {
                     settings.disconnect(signalId);
@@ -996,7 +995,7 @@ export default class DynamicDesktopPreferences extends ExtensionPreferences {
             if (cssDisplay) {
                 Gtk.StyleContext.remove_provider_for_display(
                     cssDisplay,
-                    scheduleRowCss
+                    scheduleRowCss,
                 );
             }
 
@@ -1007,47 +1006,49 @@ export default class DynamicDesktopPreferences extends ExtensionPreferences {
         page.add(solarStatusGroup);
 
         const scheduleGroup = new Adw.PreferencesGroup({
-            title: 'Часові точки',
+            title: "Часові точки",
             description:
-                'Укажіть місцевий час, з якого починається показ кожного кадру.',
+                "Укажіть місцевий час, з якого починається показ кожного кадру.",
         });
 
         const scheduleRows = [];
 
         const statusRow = new Adw.ActionRow({
-            title: 'Стан розкладу',
-            subtitle: 'Завантаження…',
+            title: "Стан розкладу",
+            subtitle: "Завантаження…",
         });
 
         const previewImageSignal = settings.connect(
-            'changed::preview-image',
+            "changed::preview-image",
             () => {
-                const path = settings.get_string('preview-image').trim();
+                const path = settings.get_string("preview-image").trim();
 
                 if (path) {
                     statusRow.subtitle =
                         `Тестовий показ: ${basename(path)}. ` +
-                        'Повернення до розкладу через 10 секунд після переходу.';
+                        "Повернення до розкладу через 10 секунд після переходу.";
                 } else {
-                    statusRow.subtitle = settings.get_string('schedule-json').trim()
-                        ? 'Використовується власний розклад.'
-                        : 'Використовується типовий розклад.';
+                    statusRow.subtitle = settings
+                        .get_string("schedule-json")
+                        .trim()
+                        ? "Використовується власний розклад."
+                        : "Використовується типовий розклад.";
                 }
-            }
+            },
         );
         solarReadoutSignals.push(previewImageSignal);
 
         const actionsGroup = new Adw.PreferencesGroup({
-            title: 'Керування розкладом',
+            title: "Керування розкладом",
         });
 
         const saveRow = new Adw.ActionRow({
-            title: 'Зберегти часові точки',
-            subtitle: 'Застосувати власний розклад.',
+            title: "Зберегти часові точки",
+            subtitle: "Застосувати власний розклад.",
         });
 
         const saveButton = new Gtk.Button({
-            label: 'Зберегти',
+            label: "Зберегти",
             valign: Gtk.Align.CENTER,
         });
 
@@ -1055,13 +1056,13 @@ export default class DynamicDesktopPreferences extends ExtensionPreferences {
         actionsGroup.add(saveRow);
 
         const resetRow = new Adw.ActionRow({
-            title: 'Типовий розклад',
+            title: "Типовий розклад",
             subtitle:
-                'Mojave використовує власні часові точки; інші набори розподіляються рівномірно.',
+                "Mojave використовує власні часові точки; інші набори розподіляються рівномірно.",
         });
 
         const resetButton = new Gtk.Button({
-            label: 'Скинути',
+            label: "Скинути",
             valign: Gtk.Align.CENTER,
         });
 
@@ -1070,25 +1071,25 @@ export default class DynamicDesktopPreferences extends ExtensionPreferences {
         actionsGroup.add(statusRow);
 
         const transitionGroup = new Adw.PreferencesGroup({
-            title: 'Плавні переходи',
-            description: 'Тривалість перехресного проявлення.',
+            title: "Плавні переходи",
+            description: "Тривалість перехресного проявлення.",
         });
 
         const durationRow = new Adw.ActionRow({
-            title: 'Тривалість переходу',
-            subtitle: 'У секундах',
+            title: "Тривалість переходу",
+            subtitle: "У секундах",
         });
 
         const durationButton = RegulatorButton.forSetting(
             settings,
-            'transition-duration',
+            "transition-duration",
             {
                 minValue: 1,
                 maxValue: 10,
                 step: 0.5,
                 defaultValue: 4,
                 digits: 1,
-            }
+            },
         );
         durationRow.add_suffix(durationButton);
         durationRow.activatable_widget = durationButton;
@@ -1098,8 +1099,7 @@ export default class DynamicDesktopPreferences extends ExtensionPreferences {
         const controls = [];
 
         function clearScheduleRows() {
-            for (const row of scheduleRows)
-                scheduleGroup.remove(row);
+            for (const row of scheduleRows) scheduleGroup.remove(row);
 
             scheduleRows.length = 0;
             controls.length = 0;
@@ -1109,8 +1109,7 @@ export default class DynamicDesktopPreferences extends ExtensionPreferences {
             clearScheduleRows();
 
             const directoryPath =
-                settings.get_string('wallpaper-directory') ||
-                defaultDirectory;
+                settings.get_string("wallpaper-directory") || defaultDirectory;
 
             folderRow.subtitle = displayDirectory(directoryPath);
 
@@ -1128,7 +1127,7 @@ export default class DynamicDesktopPreferences extends ExtensionPreferences {
 
             if (images.length < 2) {
                 statusRow.subtitle =
-                    'У вибраній теці має бути щонайменше два зображення.';
+                    "У вибраній теці має бути щонайменше два зображення.";
                 saveButton.sensitive = false;
                 page.add(scheduleGroup);
                 return;
@@ -1140,17 +1139,16 @@ export default class DynamicDesktopPreferences extends ExtensionPreferences {
             try {
                 entries = readSchedule(
                     images,
-                    settings.get_string('schedule-json')
+                    settings.get_string("schedule-json"),
                 );
             } catch (error) {
                 entries = defaultSchedule(images);
                 usingDefault = true;
-                statusRow.subtitle =
-                    `Показано типовий розклад: ${error.message}`;
+                statusRow.subtitle = `Показано типовий розклад: ${error.message}`;
             }
 
             const byName = new Map(
-                entries.map(entry => [entry.file, entry.minute])
+                entries.map((entry) => [entry.file, entry.minute]),
             );
 
             for (const imagePath of images) {
@@ -1158,7 +1156,7 @@ export default class DynamicDesktopPreferences extends ExtensionPreferences {
                 const minute = byName.get(filename) ?? 0;
 
                 const row = new Adw.ActionRow();
-                row.add_css_class('wallpaper-schedule-row');
+                row.add_css_class("wallpaper-schedule-row");
                 row.set_size_request(-1, 54);
 
                 let thumbnailFrame;
@@ -1168,13 +1166,13 @@ export default class DynamicDesktopPreferences extends ExtensionPreferences {
                         imagePath,
                         320,
                         44,
-                        true
+                        true,
                     );
                     const aspectRatio =
                         pixbuf.get_width() / pixbuf.get_height();
                     const thumbnailWidth = Math.max(
                         1,
-                        Math.round(44 * aspectRatio)
+                        Math.round(44 * aspectRatio),
                     );
 
                     const picture = new Gtk.Picture();
@@ -1182,26 +1180,26 @@ export default class DynamicDesktopPreferences extends ExtensionPreferences {
                     picture.set_content_fit(Gtk.ContentFit.CONTAIN);
                     picture.set_paintable(Gdk.Texture.new_for_pixbuf(pixbuf));
                     picture.set_size_request(thumbnailWidth, 44);
-                    picture.add_css_class('wallpaper-thumbnail-image');
+                    picture.add_css_class("wallpaper-thumbnail-image");
 
                     thumbnailFrame = new Gtk.Frame();
-                    thumbnailFrame.add_css_class('wallpaper-thumbnail');
+                    thumbnailFrame.add_css_class("wallpaper-thumbnail");
                     thumbnailFrame.set_size_request(thumbnailWidth, 44);
                     thumbnailFrame.set_child(picture);
                 } catch (error) {
                     thumbnailFrame = new Gtk.Frame();
-                    thumbnailFrame.add_css_class('wallpaper-thumbnail');
+                    thumbnailFrame.add_css_class("wallpaper-thumbnail");
                     thumbnailFrame.set_size_request(44, 44);
 
                     const fallback = new Gtk.Image({
-                        icon_name: 'image-missing',
+                        icon_name: "image-missing",
                     });
                     fallback.set_pixel_size(24);
                     fallback.set_halign(Gtk.Align.CENTER);
                     fallback.set_valign(Gtk.Align.CENTER);
                     thumbnailFrame.set_child(fallback);
                     thumbnailFrame.set_tooltip_text(
-                        `${filename}: ${error.message}`
+                        `${filename}: ${error.message}`,
                     );
                 }
 
@@ -1210,15 +1208,15 @@ export default class DynamicDesktopPreferences extends ExtensionPreferences {
                 thumbnailFrame.set_margin_top(5);
                 thumbnailFrame.set_margin_bottom(5);
                 thumbnailFrame.set_tooltip_text(filename);
-                thumbnailFrame.set_cursor_from_name('pointer');
+                thumbnailFrame.set_cursor_from_name("pointer");
 
                 const previewGesture = Gtk.GestureClick.new();
                 previewGesture.set_button(1);
-                previewGesture.connect('released', () => {
-                    if (settings.get_string('preview-image') === imagePath)
-                        settings.set_string('preview-image', '');
+                previewGesture.connect("released", () => {
+                    if (settings.get_string("preview-image") === imagePath)
+                        settings.set_string("preview-image", "");
 
-                    settings.set_string('preview-image', imagePath);
+                    settings.set_string("preview-image", imagePath);
                 });
                 thumbnailFrame.add_controller(previewGesture);
 
@@ -1229,7 +1227,7 @@ export default class DynamicDesktopPreferences extends ExtensionPreferences {
 
                 const hour = RegulatorButton.forValue({
                     getValue: () => hourValue,
-                    setValue: value => {
+                    setValue: (value) => {
                         hourValue = value;
                     },
                     minValue: 0,
@@ -1238,12 +1236,12 @@ export default class DynamicDesktopPreferences extends ExtensionPreferences {
                     defaultValue: hourValue,
                     digits: 0,
                     width: 48,
-                    formatValue: value => String(value).padStart(2, '0'),
+                    formatValue: (value) => String(value).padStart(2, "0"),
                 });
 
                 const minutes = RegulatorButton.forValue({
                     getValue: () => minuteValue,
-                    setValue: value => {
+                    setValue: (value) => {
                         minuteValue = value;
                     },
                     minValue: 0,
@@ -1252,7 +1250,7 @@ export default class DynamicDesktopPreferences extends ExtensionPreferences {
                     defaultValue: minuteValue,
                     digits: 0,
                     width: 48,
-                    formatValue: value => String(value).padStart(2, '0'),
+                    formatValue: (value) => String(value).padStart(2, "0"),
                 });
 
                 const timeBox = new Gtk.Box({
@@ -1262,7 +1260,7 @@ export default class DynamicDesktopPreferences extends ExtensionPreferences {
                 });
 
                 timeBox.append(hour);
-                timeBox.append(new Gtk.Label({ label: ':' }));
+                timeBox.append(new Gtk.Label({ label: ":" }));
                 timeBox.append(minutes);
 
                 row.add_suffix(timeBox);
@@ -1279,45 +1277,44 @@ export default class DynamicDesktopPreferences extends ExtensionPreferences {
             saveButton.sensitive = true;
 
             if (!usingDefault) {
-                statusRow.subtitle = settings.get_string('schedule-json').trim()
-                    ? 'Використовується власний розклад.'
-                    : 'Використовується типовий розклад.';
+                statusRow.subtitle = settings.get_string("schedule-json").trim()
+                    ? "Використовується власний розклад."
+                    : "Використовується типовий розклад.";
             }
 
-            if (!page.get_parent())
-                page.add(scheduleGroup);
+            if (!page.get_parent()) page.add(scheduleGroup);
         }
 
-        chooseButton.connect('clicked', () => {
+        chooseButton.connect("clicked", () => {
             const chooser = Gtk.FileChooserNative.new(
-                'Вибрати теку зі шпалерами',
+                "Вибрати теку зі шпалерами",
                 window,
                 Gtk.FileChooserAction.SELECT_FOLDER,
-                'Вибрати',
-                'Скасувати'
+                "Вибрати",
+                "Скасувати",
             );
 
             try {
                 chooser.set_current_folder(
                     Gio.File.new_for_path(
-                        settings.get_string('wallpaper-directory') ||
-                        defaultDirectory
-                    )
+                        settings.get_string("wallpaper-directory") ||
+                            defaultDirectory,
+                    ),
                 );
             } catch (_) {
                 // The selected directory may no longer exist.
             }
 
-            chooser.connect('response', (dialog, response) => {
+            chooser.connect("response", (dialog, response) => {
                 if (response === Gtk.ResponseType.ACCEPT) {
                     const path = dialog.get_file()?.get_path();
 
                     if (path) {
                         // A custom schedule belongs to its original image set.
-                        settings.set_string('schedule-json', '');
-                        settings.set_string('schedule-mode', 'clock');
+                        settings.set_string("schedule-json", "");
+                        settings.set_string("schedule-mode", "clock");
                         modeRow.selected = 0;
-                        settings.set_string('wallpaper-directory', path);
+                        settings.set_string("wallpaper-directory", path);
                         refreshScheduleEditor();
                     }
                 }
@@ -1328,51 +1325,47 @@ export default class DynamicDesktopPreferences extends ExtensionPreferences {
             chooser.show();
         });
 
-        restoreFolderButton.connect('clicked', () => {
-            settings.set_string('schedule-json', '');
-            settings.set_string('schedule-mode', 'clock');
+        restoreFolderButton.connect("clicked", () => {
+            settings.set_string("schedule-json", "");
+            settings.set_string("schedule-mode", "clock");
             modeRow.selected = 0;
-            settings.set_string('wallpaper-directory', '');
+            settings.set_string("wallpaper-directory", "");
             refreshScheduleEditor();
         });
 
-        saveButton.connect('clicked', () => {
-            const entries = controls.map(control => ({
+        saveButton.connect("clicked", () => {
+            const entries = controls.map((control) => ({
                 file: control.file,
                 minute:
                     control.hour.getCurrentValue() * 60 +
                     control.minutes.getCurrentValue(),
             }));
 
-            const times = entries.map(entry => entry.minute);
+            const times = entries.map((entry) => entry.minute);
 
             if (new Set(times).size !== times.length) {
                 statusRow.subtitle =
-                    'Помилка: кожне зображення повинно мати унікальний час.';
+                    "Помилка: кожне зображення повинно мати унікальний час.";
                 return;
             }
 
             entries.sort((a, b) => a.minute - b.minute);
 
-            settings.set_string(
-                'schedule-json',
-                JSON.stringify(entries)
-            );
-            settings.set_string('schedule-mode', 'custom');
+            settings.set_string("schedule-json", JSON.stringify(entries));
+            settings.set_string("schedule-mode", "custom");
             modeRow.selected = 1;
-            updateModeStatus('custom');
+            updateModeStatus("custom");
 
-            statusRow.subtitle =
-                `Розклад збережено: ${entries.length} часових точок.`;
+            statusRow.subtitle = `Розклад збережено: ${entries.length} часових точок.`;
         });
 
-        resetButton.connect('clicked', () => {
-            settings.set_string('schedule-json', '');
-            settings.set_string('schedule-mode', 'clock');
+        resetButton.connect("clicked", () => {
+            settings.set_string("schedule-json", "");
+            settings.set_string("schedule-mode", "clock");
             modeRow.selected = 0;
-            updateModeStatus('clock');
+            updateModeStatus("clock");
             refreshScheduleEditor();
-            statusRow.subtitle = 'Відновлено типовий розклад.';
+            statusRow.subtitle = "Відновлено типовий розклад.";
         });
 
         page.add(scheduleGroup);

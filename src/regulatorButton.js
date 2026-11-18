@@ -1,6 +1,6 @@
-import Gdk from 'gi://Gdk';
-import Gtk from 'gi://Gtk';
-import GObject from 'gi://GObject';
+import Gdk from "gi://Gdk";
+import Gtk from "gi://Gtk";
+import GObject from "gi://GObject";
 
 export const RegulatorButton = GObject.registerClass(
     class RegulatorButton extends Gtk.Button {
@@ -23,8 +23,7 @@ export const RegulatorButton = GObject.registerClass(
             super._init({
                 valign: Gtk.Align.CENTER,
                 width_request: width,
-                tooltip_text:
-                    `Прокрутка — змінити значення, клік — скинути до ${defaultLabel}`,
+                tooltip_text: `Прокрутка — змінити значення, клік — скинути до ${defaultLabel}`,
             });
 
             this._getValue = getValue;
@@ -37,7 +36,7 @@ export const RegulatorButton = GObject.registerClass(
             this._formatValue = formatValue;
 
             this._value = this._getValue();
-            this.add_css_class('numeric');
+            this.add_css_class("numeric");
             this._updateLabel();
 
             const scrollController = new Gtk.EventControllerScroll({
@@ -45,22 +44,22 @@ export const RegulatorButton = GObject.registerClass(
                     Gtk.EventControllerScrollFlags.VERTICAL |
                     Gtk.EventControllerScrollFlags.DISCRETE,
             });
-            scrollController.connect('scroll', (_controller, _dx, dy) => {
+            scrollController.connect("scroll", (_controller, _dx, dy) => {
                 this._adjustValue(dy > 0 ? -this._step : this._step);
                 return Gdk.EVENT_STOP;
             });
             this.add_controller(scrollController);
 
-            this.connect('clicked', () => this._setValue(this._defaultValue));
+            this.connect("clicked", () => this._setValue(this._defaultValue));
 
             this._unsubscribe = subscribe
                 ? subscribe(() => {
-                    this._value = this._getValue();
-                    this._updateLabel();
-                })
+                      this._value = this._getValue();
+                      this._updateLabel();
+                  })
                 : null;
 
-            this.connect('destroy', () => {
+            this.connect("destroy", () => {
                 if (this._unsubscribe) {
                     this._unsubscribe();
                     this._unsubscribe = null;
@@ -72,8 +71,8 @@ export const RegulatorButton = GObject.registerClass(
             return new RegulatorButton({
                 ...options,
                 getValue: () => settings.get_double(key),
-                setValue: value => settings.set_double(key, value),
-                subscribe: callback => {
+                setValue: (value) => settings.set_double(key, value),
+                subscribe: (callback) => {
                     const id = settings.connect(`changed::${key}`, callback);
                     return () => settings.disconnect(id);
                 },
@@ -107,7 +106,7 @@ export const RegulatorButton = GObject.registerClass(
             this.set_label(
                 this._formatValue
                     ? this._formatValue(this._value)
-                    : this._value.toFixed(this._digits)
+                    : this._value.toFixed(this._digits),
             );
         }
     },
