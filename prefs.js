@@ -1,4 +1,6 @@
 import Adw from 'gi://Adw';
+import Gdk from 'gi://Gdk';
+import GdkPixbuf from 'gi://GdkPixbuf';
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 import Gtk from 'gi://Gtk';
@@ -158,6 +160,33 @@ export default class DynamicDesktopPreferences extends ExtensionPreferences {
 
         const settings = this.getSettings();
 
+        const scheduleRowCss = new Gtk.CssProvider();
+        scheduleRowCss.load_from_data(`
+            row.wallpaper-schedule-row {
+                min-height: 54px;
+                padding: 0;
+            }
+            row.wallpaper-schedule-row > box.content > box.header {
+                padding: 0;
+            }
+            frame.wallpaper-thumbnail {
+                border-radius: 6px;
+            }
+            frame.wallpaper-thumbnail > border {
+                border: none;
+                border-radius: 6px;
+            }
+        `, -1);
+
+        const cssDisplay = Gdk.Display.get_default();
+        if (cssDisplay) {
+            Gtk.StyleContext.add_provider_for_display(
+                cssDisplay,
+                scheduleRowCss,
+                Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
+            );
+        }
+
         const defaultDirectory = GLib.build_filenamev([
             GLib.get_home_dir(),
             'Завантажене',
@@ -196,35 +225,6 @@ export default class DynamicDesktopPreferences extends ExtensionPreferences {
         folderGroup.add(folderRow);
 
         page.add(folderGroup);
-
-        const previewGroup = new Adw.PreferencesGroup({
-            title: 'Попередній перегляд набору',
-            description:
-                'Усі зображення вибраної теки. ' +
-                'Мініатюри оновлюються після зміни набору.',
-        });
-
-        const previewStatus = new Gtk.Label({
-            label: 'Очікування списку зображень…',
-            xalign: 0,
-            wrap: true,
-        });
-
-        let previewImageCount = 0;
-
-        const previewGrid = new Gtk.Grid({
-            column_spacing: 8,
-            row_spacing: 10,
-            margin_top: 6,
-            margin_bottom: 6,
-            margin_start: 2,
-            margin_end: 2,
-            column_homogeneous: true,
-        });
-
-        previewGroup.add(previewStatus);
-        previewGroup.add(previewGrid);
-        page.add(previewGroup);
 
         const modeGroup = new Adw.PreferencesGroup({
             title: 'Режим зміни шпалер',
@@ -941,25 +941,6 @@ export default class DynamicDesktopPreferences extends ExtensionPreferences {
             settings.connect(`changed::${key}`, refreshSolarReadout)
         );
 
-        const previewGallerySignal = settings.connect(
-            'changed::preview-image',
-            () => {
-                const path = settings.get_string('preview-image').trim();
-
-                if (path) {
-                    previewStatus.set_text(
-                        `Тестовий показ: ${basename(path)}`
-                    );
-                } else {
-                    previewStatus.set_text(
-                        `Зображень у наборі: ${previewImageCount}`
-                    );
-                }
-            }
-        );
-
-        solarReadoutSignals.push(previewGallerySignal);
-
         window.connect('close-request', () => {
             for (const signalId of solarReadoutSignals) {
                 try {
@@ -967,6 +948,13 @@ export default class DynamicDesktopPreferences extends ExtensionPreferences {
                 } catch (_) {
                     // The signal may already have been disconnected.
                 }
+            }
+
+            if (cssDisplay) {
+                Gtk.StyleContext.remove_provider_for_display(
+                    cssDisplay,
+                    scheduleRowCss
+                );
             }
 
             return false;
@@ -987,6 +975,24 @@ export default class DynamicDesktopPreferences extends ExtensionPreferences {
             title: 'Стан розкладу',
             subtitle: 'Завантаження…',
         });
+
+        const previewImageSignal = settings.connect(
+            'changed::preview-image',
+            () => {
+                const path = settings.get_string('preview-image').trim();
+
+                if (path) {
+                    statusRow.subtitle =
+                        `Тестовий показ: ${basename(path)}. ` +
+                        'Повернення до розкладу через 10 секунд після переходу.';
+                } else {
+                    statusRow.subtitle = settings.get_string('schedule-json').trim()
+                        ? 'Використовується власний розклад.'
+                        : 'Використовується типовий розклад.';
+                }
+            }
+        );
+        solarReadoutSignals.push(previewImageSignal);
 
         const actionsGroup = new Adw.PreferencesGroup({
             title: 'Керування розкладом',
@@ -1048,89 +1054,6 @@ export default class DynamicDesktopPreferences extends ExtensionPreferences {
 
         const controls = [];
 
-        function clearPreviewGrid() {
-            let child = previewGrid.get_first_child();
-
-            while (child) {
-                const next = child.get_next_sibling();
-                previewGrid.remove(child);
-                child = next;
-            }
-        }
-
-        function refreshPreviewGallery(images, errorMessage = '') {
-            clearPreviewGrid();
-
-            if (errorMessage) {
-                previewStatus.set_text(errorMessage);
-                previewGrid.set_visible(false);
-                return;
-            }
-
-            previewGrid.set_visible(true);
-            previewImageCount = images.length;
-            previewStatus.set_text(
-                `Зображень у наборі: ${images.length}`
-            );
-
-            images.forEach((imagePath, index) => {
-                const filename = basename(imagePath);
-
-                const tile = new Gtk.Box({
-                    orientation: Gtk.Orientation.VERTICAL,
-                    spacing: 6,
-                    halign: Gtk.Align.FILL,
-                });
-                tile.add_css_class('card');
-
-                const picture = new Gtk.Picture();
-                picture.set_size_request(96, 54);
-                picture.set_can_shrink(true);
-                picture.set_content_fit(Gtk.ContentFit.COVER);
-                picture.set_alternative_text(filename);
-                picture.set_file(
-                    Gio.File.new_for_path(imagePath)
-                );
-
-                const label = new Gtk.Label({
-                    label: filename,
-                    wrap: true,
-                    max_width_chars: 14,
-                });
-                label.set_justify(Gtk.Justification.CENTER);
-
-                tile.append(picture);
-                tile.append(label);
-
-                const previewButton = new Gtk.Button({
-                    valign: Gtk.Align.START,
-                });
-                previewButton.add_css_class('flat');
-                previewButton.set_child(tile);
-                previewButton.set_tooltip_text(
-                    `Показати ${filename} приблизно на 10 секунд`
-                );
-
-                previewButton.connect('clicked', () => {
-                    if (settings.get_string('preview-image') === imagePath)
-                        settings.set_string('preview-image', '');
-
-                    settings.set_string('preview-image', imagePath);
-                    previewStatus.set_text(
-                        `Тестовий показ: ${filename}. Повернення до розкладу через 10 секунд після переходу.`
-                    );
-                });
-
-                previewGrid.attach(
-                    previewButton,
-                    index % 3,
-                    Math.floor(index / 3),
-                    1,
-                    1
-                );
-            });
-        }
-
         function clearScheduleRows() {
             for (const row of scheduleRows)
                 scheduleGroup.remove(row);
@@ -1152,13 +1075,8 @@ export default class DynamicDesktopPreferences extends ExtensionPreferences {
 
             try {
                 images = listImages(directoryPath);
-                refreshPreviewGallery(images);
                 refreshAppearanceModels(images);
             } catch (error) {
-                refreshPreviewGallery(
-                    [],
-                    `Не вдалося прочитати теку: ${error.message}`
-                );
                 statusRow.subtitle = `Не вдалося прочитати теку: ${error.message}`;
                 saveButton.sensitive = false;
                 page.add(scheduleGroup);
@@ -1196,10 +1114,72 @@ export default class DynamicDesktopPreferences extends ExtensionPreferences {
                 const filename = basename(imagePath);
                 const minute = byName.get(filename) ?? 0;
 
-                const row = new Adw.ActionRow({
-                    title: filename,
-                    subtitle: 'Час початку показу',
+                const row = new Adw.ActionRow();
+                row.add_css_class('wallpaper-schedule-row');
+                row.set_size_request(-1, 54);
+
+                let thumbnailFrame;
+
+                try {
+                    const pixbuf = GdkPixbuf.Pixbuf.new_from_file_at_scale(
+                        imagePath,
+                        320,
+                        44,
+                        true
+                    );
+                    const aspectRatio =
+                        pixbuf.get_width() / pixbuf.get_height();
+                    const thumbnailWidth = Math.max(
+                        1,
+                        Math.round(44 * aspectRatio)
+                    );
+
+                    const picture = new Gtk.Picture();
+                    picture.set_can_shrink(false);
+                    picture.set_content_fit(Gtk.ContentFit.CONTAIN);
+                    picture.set_paintable(Gdk.Texture.new_for_pixbuf(pixbuf));
+                    picture.set_size_request(thumbnailWidth, 44);
+                    picture.add_css_class('wallpaper-thumbnail-image');
+
+                    thumbnailFrame = new Gtk.Frame();
+                    thumbnailFrame.add_css_class('wallpaper-thumbnail');
+                    thumbnailFrame.set_size_request(thumbnailWidth, 44);
+                    thumbnailFrame.set_child(picture);
+                } catch (error) {
+                    thumbnailFrame = new Gtk.Frame();
+                    thumbnailFrame.add_css_class('wallpaper-thumbnail');
+                    thumbnailFrame.set_size_request(44, 44);
+
+                    const fallback = new Gtk.Image({
+                        icon_name: 'image-missing',
+                    });
+                    fallback.set_pixel_size(24);
+                    fallback.set_halign(Gtk.Align.CENTER);
+                    fallback.set_valign(Gtk.Align.CENTER);
+                    thumbnailFrame.set_child(fallback);
+                    thumbnailFrame.set_tooltip_text(
+                        `${filename}: ${error.message}`
+                    );
+                }
+
+                thumbnailFrame.set_valign(Gtk.Align.CENTER);
+                thumbnailFrame.set_margin_start(0);
+                thumbnailFrame.set_margin_top(5);
+                thumbnailFrame.set_margin_bottom(5);
+                thumbnailFrame.set_tooltip_text(filename);
+                thumbnailFrame.set_cursor_from_name('pointer');
+
+                const previewGesture = Gtk.GestureClick.new();
+                previewGesture.set_button(1);
+                previewGesture.connect('released', () => {
+                    if (settings.get_string('preview-image') === imagePath)
+                        settings.set_string('preview-image', '');
+
+                    settings.set_string('preview-image', imagePath);
                 });
+                thumbnailFrame.add_controller(previewGesture);
+
+                row.add_prefix(thumbnailFrame);
 
                 let hourValue = Math.floor(minute / 60);
                 let minuteValue = minute % 60;
