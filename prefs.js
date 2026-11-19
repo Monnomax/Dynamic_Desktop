@@ -223,8 +223,6 @@ export default class DynamicDesktopPreferences extends ExtensionPreferences {
         folderRow.add_suffix(restoreFolderButton);
         folderGroup.add(folderRow);
 
-        page.add(folderGroup);
-
         const modeGroup = new Adw.PreferencesGroup({
             title: "Режим зміни шпалер",
             description:
@@ -258,6 +256,7 @@ export default class DynamicDesktopPreferences extends ExtensionPreferences {
         modeGroup.add(modeRow);
         modeGroup.add(modeStatusRow);
         page.add(modeGroup);
+        page.add(folderGroup);
 
         const solarGroup = new Adw.PreferencesGroup({
             title: "Місце для Solar",
