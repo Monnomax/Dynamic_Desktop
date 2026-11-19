@@ -1,5 +1,6 @@
 import Gio from "gi://Gio";
 import GLib from "gi://GLib";
+import { getNumberedImageSequence, getDefaultScheduleMinutes } from "./wallpaperSequence.js";
 
 export class WallpaperSet {
     constructor(settings) {
@@ -13,11 +14,10 @@ export class WallpaperSet {
 
         if (configured) return configured;
 
-        return GLib.build_filenamev([
-            GLib.get_home_dir(),
-            "Завантажене",
-            "mojave_dynamic",
-        ]);
+        return (
+            GLib.get_user_special_dir(GLib.UserDirectory.PICTURES) ||
+            GLib.get_home_dir()
+        );
     }
 
     _listImages(directoryPath) {
@@ -65,63 +65,34 @@ export class WallpaperSet {
         if (images.length < 2)
             throw new Error("The folder must contain at least two images");
 
-        return images;
+        return getNumberedImageSequence(images, GLib.path_get_basename) ?? images;
     }
 
     _createDefaultSchedule(images) {
-        const byNumber = new Map();
+        const sequence = getNumberedImageSequence(
+            images,
+            GLib.path_get_basename,
+        );
+        const orderedImages = sequence ?? images;
+        const useSixteenFrameDayCycle = sequence?.length === 16;
+        const minutes = getDefaultScheduleMinutes(
+            orderedImages.length,
+            useSixteenFrameDayCycle,
+        );
 
-        for (const image of images) {
-            const name = GLib.path_get_basename(image);
-            const match = name.match(/^mojave_dynamic_(\d+)\.jpeg$/i);
-
-            if (match) byNumber.set(Number(match[1]), image);
-        }
-
-        const isMojave =
-            images.length === 16 &&
-            Array.from({ length: 16 }, (_, i) => i + 1).every((number) =>
-                byNumber.has(number),
-            );
-
-        if (isMojave) {
-            const times = [
-                [180, 16],
-                [300, 1],
-                [360, 2],
-                [420, 3],
-                [480, 4],
-                [540, 5],
-                [600, 6],
-                [660, 7],
-                [780, 8],
-                [840, 9],
-                [900, 10],
-                [960, 11],
-                [1020, 12],
-                [1080, 13],
-                [1200, 14],
-                [1380, 15],
-            ];
-
-            return {
-                name: "Mojave",
-                schedule: times.map(([minute, number]) => ({
-                    minute,
-                    image: byNumber.get(number),
-                })),
-            };
-        }
+        const schedule = orderedImages.map((image, index) => ({
+            minute: minutes[index],
+            image,
+        }));
+        schedule.sort((a, b) => a.minute - b.minute);
 
         return {
-            name: "Generic 24-hour schedule",
-            schedule: images.map((image, index) => ({
-                minute: Math.floor((index * 1440) / images.length),
-                image,
-            })),
+            name: useSixteenFrameDayCycle
+                ? "16-frame daily cycle"
+                : "Generic 24-hour schedule",
+            schedule,
         };
     }
-
     _createSolarSchedule(images) {
         const settings = this._settings;
 
@@ -131,23 +102,14 @@ export class WallpaperSet {
             );
         }
 
-        const byNumber = new Map();
+        const sequence = getNumberedImageSequence(
+            images,
+            GLib.path_get_basename,
+        );
 
-        for (const image of images) {
-            const name = GLib.path_get_basename(image);
-            const match = name.match(/^mojave_dynamic_(\d+)\.jpeg$/i);
-
-            if (match) byNumber.set(Number(match[1]), image);
-        }
-
-        if (
-            images.length !== 16 ||
-            Array.from({ length: 16 }, (_, index) => index + 1).some(
-                (number) => !byNumber.has(number),
-            )
-        ) {
+        if (!sequence || sequence.length !== 16) {
             throw new Error(
-                "Solar mode currently supports the complete 16-image Mojave set only.",
+                "Solar mode requires 16 sequentially numbered images (frames 1 through 16).",
             );
         }
 
@@ -171,16 +133,15 @@ export class WallpaperSet {
         ];
 
         return {
-            name: "Solar (Mojave)",
+            name: "Solar",
             schedule: [],
             solarAnchors: anchors.map(([number, altitude, azimuth]) => ({
-                image: byNumber.get(number),
+                image: sequence[number - 1],
                 altitude,
                 azimuth,
             })),
         };
     }
-
     _readCustomSchedule(images) {
         const settings = this._settings;
         const mode = settings.get_string("schedule-mode");
